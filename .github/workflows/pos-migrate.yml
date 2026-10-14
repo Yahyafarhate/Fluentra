@@ -1,0 +1,26 @@
+name: Migrate POS database
+# Manual only. Applies the POS SQL migrations to the database in POS_MIGRATION_DATABASE_URL and
+# (re)creates the non-superuser runtime role `comptoir_app`. Never seeds demo data.
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type MIGRATE to confirm'
+        required: true
+jobs:
+  migrate:
+    if: ${{ github.event.inputs.confirm == 'MIGRATE' }}
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: pos } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: pos/package-lock.json }
+      - run: npm ci
+      - name: Run migrations
+        env:
+          MIGRATION_DATABASE_URL: ${{ secrets.POS_MIGRATION_DATABASE_URL }}
+          APP_DB_PASSWORD: ${{ secrets.POS_APP_DB_PASSWORD }}
+        run: |
+          test -n "$MIGRATION_DATABASE_URL" && test -n "$APP_DB_PASSWORD" || { echo "Missing secrets POS_MIGRATION_DATABASE_URL / POS_APP_DB_PASSWORD"; exit 1; }
+          npm run db:migrate

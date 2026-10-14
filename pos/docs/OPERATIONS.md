@@ -19,3 +19,12 @@ The database is the single source of truth (orders, payments, audit, outbox). Us
 
 ## Security checklist
 Non-superuser DB role; TLS in front of the app; rotate `CRON_SECRET`/`FLUENTRA_SHARED_SECRET` on staff changes; keep `POS_ENABLE_TEST_PAYMENTS` off; restrict `/api/cron/tick` at the proxy if possible. Cookies are HttpOnly + SameSite=Lax (+ Secure in production) and mutations need a same-origin `Origin`.
+
+## Deploy on Vercel + Neon without cloning (step by step)
+1. **Merge the pull request** so the workflows below exist on the default branch (and Vercel deploys the code).
+2. **Neon**: in the same project create a second database (e.g. `comptoir`) — or a new project. Copy the *direct* URL (no `-pooler`) of the owner role, with the new database name, `?sslmode=require` and without `channel_binding`.
+3. **GitHub → Settings → Secrets → Actions**: `POS_MIGRATION_DATABASE_URL` (that direct URL) and `POS_APP_DB_PASSWORD` (an alphanumeric password you invent for the `comptoir_app` role).
+4. **Actions → "Migrate POS database" → Run workflow** → type `MIGRATE`. Wait for `migrations up to date`.
+5. **Vercel → Add New Project** → same GitHub repository → **Root Directory: `pos`** → Framework: Next.js. Environment variables: `DATABASE_URL` = `postgresql://comptoir_app:<POS_APP_DB_PASSWORD>@<pooled host>/<database>?sslmode=require`, `CRON_SECRET` (random), `TRUST_PROXY=true`, `APP_URL=https://<your-pos>.vercel.app`, `POS_ALLOW_SIGNUP=true` (until your organization exists, then remove it), `POS_ENABLE_TEST_PAYMENTS=true` only for a demo (never for real customers). Deploy.
+6. Open `https://<your-pos>.vercel.app/signup`, create the organization; note the terminal code.
+7. For the Fluentra sync, add the GitHub secrets `POS_APP_URL` and `POS_CRON_SECRET` (same value as `CRON_SECRET`) so `POS background tick` runs every 5 minutes.
