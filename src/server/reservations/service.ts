@@ -34,6 +34,7 @@ export const bookingInputSchema = z.object({
   isVip: z.boolean().optional(),
   isPrivateEvent: z.boolean().optional(),
   customerId: z.string().uuid().optional().nullable(),
+  sectionId: z.string().uuid().optional().nullable(),
   tableIds: z.array(z.string().uuid()).max(10).optional(),
   status: z.enum(["pending", "confirmed"]).optional(),
   language: z.enum(["fr", "en", "ar"]).optional().nullable(),
@@ -108,7 +109,7 @@ export async function createReservationTx(db: Db, input: BookingInput, o: Bookin
   if (!w && !force) throw unprocessable(RULE_REASON_MSG.closed[1], "CLOSED");
   if (channel === "online" && w && (startMin - w.startMin) % w.intervalMin !== 0) throw unprocessable("That start time is not offered", "INVALID_SLOT");
 
-  const slot = evaluateStart(day, input.date, startMin, w, { channel, partySize: input.partySize, now });
+  const slot = evaluateStart(day, input.date, startMin, w, { channel, partySize: input.partySize, now, sectionId: input.sectionId });
   // walk-ins occupy the table from this very moment (not from a rounded slot time)
   const start = o.seatNow ? now : new Date(slot.startAt);
   const end = o.seatNow ? new Date(now.getTime() + slot.durationMin * 60_000) : new Date(slot.endAt);
@@ -614,7 +615,7 @@ export async function guestModify(token: string, input: z.infer<typeof guestModi
 }
 
 // ───────────────────────────── Public holds ─────────────────────────────
-export async function createHold(orgId: string, input: { locationId: string; date: string; time: string; partySize: number }) {
+export async function createHold(orgId: string, input: { locationId: string; date: string; time: string; partySize: number; sectionId?: string | null }) {
   return withOrg(orgId, async (db) => {
     const loc = await loadLocation(db, input.locationId);
     if (!loc.onlineBookingEnabled) throw forbidden("Online booking is not available", "ONLINE_BOOKING_DISABLED");
@@ -624,7 +625,7 @@ export async function createHold(orgId: string, input: { locationId: string; dat
     const startMin = timeToMin(input.time);
     const w = windowFor(day, startMin);
     if (!w || (startMin - w.startMin) % w.intervalMin !== 0) throw unprocessable("That start time is not offered", "INVALID_SLOT");
-    const slot = evaluateStart(day, input.date, startMin, w, { channel: "online", partySize: input.partySize, now });
+    const slot = evaluateStart(day, input.date, startMin, w, { channel: "online", partySize: input.partySize, now, sectionId: input.sectionId });
     if (!slot.available) { const [c, m] = RULE_REASON_MSG[slot.reason ?? "full"]; throw conflict(m, c); }
     const token = randomToken(24);
     const start = new Date(slot.startAt), end = new Date(new Date(slot.endAt).getTime() + loc.bufferMin * 60_000);

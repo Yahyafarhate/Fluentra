@@ -28,12 +28,15 @@ export interface PickArgs {
   tables: TableLite[]; combos: ComboLite[]; busy: BusyInterval[];
   start: number; end: number; party: number;
   onlineOnly?: boolean; preferSectionId?: string | null;
+  /** strict: only tables of this dining section are considered (guest chose a seating area) */
+  onlySectionId?: string | null;
 }
 
 const usable = (t: TableLite, onlineOnly?: boolean) => t.active && t.status !== "blocked" && (!onlineOnly || t.bookableOnline);
 
 /** Best-fit table (or compatible combination) for a party. Returns table ids or null. */
 export function pickTables(a: PickArgs): string[] | null {
+  if (a.onlySectionId) a = { ...a, tables: a.tables.filter((t) => t.sectionId === a.onlySectionId) };
   const byId = new Map(a.tables.map((t) => [t.id, t]));
   const singles = a.tables
     .filter((t) => usable(t, a.onlineOnly) && t.capacity >= a.party && t.minCapacity <= a.party && isFree(t.id, a.start, a.end, a.busy))

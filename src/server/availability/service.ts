@@ -108,6 +108,7 @@ export interface SlotQuery {
   partySize: number;
   now?: Date;
   preferSectionId?: string | null;
+  sectionId?: string | null;
 }
 
 /** Evaluates one candidate start against every booking rule. Used by both slot listing and reservation creation. */
@@ -144,7 +145,7 @@ export function evaluateStart(day: DayData, date: string, startMin: number, w: S
   const tableIds = pickTables({
     tables: day.tables, combos: day.combos, busy: day.busy,
     start: startAt.getTime(), end: end.getTime() + loc.bufferMin * 60_000, party: q.partySize,
-    onlineOnly: q.channel === "online", preferSectionId: q.preferSectionId,
+    onlineOnly: q.channel === "online", preferSectionId: q.preferSectionId, onlySectionId: q.sectionId,
   });
   if (!tableIds) return fail("full");
   return { ...base, available: true, tableIds };

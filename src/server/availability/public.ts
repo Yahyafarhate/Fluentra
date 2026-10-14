@@ -20,7 +20,7 @@ export async function getPublicRestaurant(slug: string) {
     const loc = await loadLocation(db, ref.id);
     const services = await db.query(`SELECT name, days, to_char(start_time,'HH24:MI') AS start_time, to_char(last_seating,'HH24:MI') AS last_seating FROM services WHERE location_id=$1 AND active ORDER BY start_time`, [loc.id]);
     const plan = await getPlanInfo(db, ref.orgId);
-    const sections = await db.query(`SELECT DISTINCT s.name, s.kind FROM sections s JOIN tables t ON t.section_id=s.id AND t.active AND t.bookable_online WHERE s.location_id=$1 ORDER BY s.name`, [loc.id]);
+    const sections = await db.query(`SELECT DISTINCT s.id, s.name, s.kind FROM sections s JOIN tables t ON t.section_id=s.id AND t.active AND t.bookable_online WHERE s.location_id=$1 ORDER BY s.name`, [loc.id]);
     const maxCap = await db.one<{ n: number | null }>(`SELECT max(capacity) AS n FROM tables WHERE location_id=$1 AND active AND bookable_online`, [loc.id]);
     const today = await todayLocal(db, loc.timezone);
     const branded = plan.features.includes("custom_branding");
@@ -36,7 +36,7 @@ export async function getPublicRestaurant(slug: string) {
   });
 }
 
-export const publicSlotsQuery = z.object({ date: z.string().refine(isDateStr), partySize: z.coerce.number().int().min(1).max(100) });
+export const publicSlotsQuery = z.object({ date: z.string().refine(isDateStr), partySize: z.coerce.number().int().min(1).max(100), sectionId: z.string().uuid().optional() });
 
 /** Public availability — never exposes table ids, names or other guests' data. */
 export async function getPublicSlots(slug: string, q: z.infer<typeof publicSlotsQuery>) {
@@ -46,7 +46,7 @@ export async function getPublicSlots(slug: string, q: z.infer<typeof publicSlots
     if (!loc.onlineBookingEnabled) throw forbidden("Online booking is not available", "ONLINE_BOOKING_DISABLED");
     const today = await todayLocal(db, loc.timezone);
     if (daysBetween(today, q.date) < 0) throw badRequest("Pick a date in the future", "IN_THE_PAST");
-    const res = await computeSlots(db, loc, q.date, { channel: "online", partySize: q.partySize });
+    const res = await computeSlots(db, loc, q.date, { channel: "online", partySize: q.partySize, sectionId: q.sectionId });
     return {
       date: res.date, closed: res.closed, closedLabel: res.closedLabel, partySize: q.partySize,
       slots: res.slots.map((s) => ({ time: s.time, available: s.available, reason: s.available ? undefined : s.reason, service: s.serviceName, durationMin: s.durationMin })),
