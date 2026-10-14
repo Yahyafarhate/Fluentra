@@ -188,7 +188,7 @@ export const dayCloseSchema = z.object({ outletId: z.uuid(), date: z.string().re
 
 export async function endOfDayReport(db: Db, ctx: Ctx, outletId: string, date: string) {
   const r = { from: date, to: date, outletId };
-  const [summary, methods, rec, dv] = await Promise.all([salesSummary(db, ctx, r), paymentMethods(db, ctx, r), reconcile(db, ctx, r), discountsAndVoids(db, ctx, r)]);
+  const summary = await salesSummary(db, ctx, r); const methods = await paymentMethods(db, ctx, r); const rec = await reconcile(db, ctx, r); const dv = await discountsAndVoids(db, ctx, r);
   const openOrders = await db.query<{ id: string; orderNo: number }>(`SELECT id, order_no FROM orders WHERE outlet_id = $1 AND status = 'open' AND business_date <= $2`, [outletId, date]);
   const openCash = await db.query<{ id: string; drawer: string }>(`SELECT id, drawer FROM cash_sessions WHERE outlet_id = $1 AND status = 'open'`, [outletId]);
   const closed = await db.maybe<{ closedAt: Date; summary: unknown }>(`SELECT closed_at, summary FROM day_closes WHERE outlet_id = $1 AND business_date = $2`, [outletId, date]);

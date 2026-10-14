@@ -9,6 +9,7 @@ const config = [
       "react-hooks/purity": "off",
       "react-hooks/immutability": "off",
       "@next/next/no-img-element": "off",
+      "@next/next/no-location-assign-relative-destination": "off", // full reload after login/logout is intentional (fresh cookie + state)
     },
   },
 ];

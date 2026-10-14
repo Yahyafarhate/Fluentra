@@ -1,5 +1,7 @@
 # Fluentra
 
+> **Also in this repository: [`pos/`](pos/README.md)** — *Comptoir*, a separate restaurant point-of-sale product (floor, orders, KDS, payments, cash, reports) that integrates with Fluentra through a signed event contract. It has its own database, tests and deployment; see `pos/docs/STATUS.md` for what is and is not implemented.
+
 Multi-tenant restaurant reservation and guest-management SaaS, adapted to Morocco and international markets (FR / AR with RTL / EN). "Fluentra" is a temporary working brand name.
 
 Stack: Next.js 16 (App Router) · TypeScript · Tailwind 4 · PostgreSQL 16 (raw SQL migrations, Row Level Security) · Zod · Vitest.

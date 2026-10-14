@@ -43,6 +43,8 @@ authRouter.add("POST", "/logout", "public", "End the session (also used to lock 
 authRouter.add("GET", "/me", "any signed-in employee", "Current employee, organization, outlet binding and permissions", authed(null, async ({ ctx }) => ({
   employee: ctx.employee, role: ctx.role, org: ctx.org, kind: ctx.kind, outletId: ctx.outletId, outletIds: ctx.outletIds,
   permissions: PERMISSIONS.filter((p) => can(ctx.role, p)),
+  testPayments: (await import("@/server/payments/providers")).cardProvider()?.isTest ?? false,
+  cardPayments: !!(await import("@/server/payments/providers")).cardProvider(),
 })));
 
 authRouter.add("POST", "/change-pin", "any signed-in employee", "Change your own PIN", authed(null, async (a) => {

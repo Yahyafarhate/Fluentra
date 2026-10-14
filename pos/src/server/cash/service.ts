@@ -61,7 +61,9 @@ export async function getCashSession(db: Db, ctx: Ctx, id: string) {
 export async function currentCashSessions(db: Db, ctx: Ctx, outletId: string) {
   await loadOutlet(db, ctx, outletId);
   const rows = await db.query<{ id: string }>(`SELECT id FROM cash_sessions WHERE outlet_id = $1 AND status = 'open' ORDER BY opened_at`, [outletId]);
-  return Promise.all(rows.map((r) => getCashSession(db, ctx, r.id)));
+  const out = [];
+  for (const r of rows) out.push(await getCashSession(db, ctx, r.id));
+  return out;
 }
 
 export const movementSchema = z.object({ kind: z.enum(["pay_in", "pay_out"]), amountCents: z.number().int().min(1).max(100_000_000), reason: z.string().trim().min(3).max(200) });

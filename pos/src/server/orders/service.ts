@@ -48,14 +48,13 @@ export async function getOrderView(db: Db, ctx: Ctx, orderId: string): Promise<O
   if (!o) throw notFound("Order");
   assertOutletAccess(ctx, o.outletId);
   const outlet = await loadOutlet(db, ctx, o.outletId);
-  const [items, mods, discounts, payments, refunds, tables] = await Promise.all([
-    db.query<Omit<ItemView, "modifiers">>(`SELECT id, product_id, name, unit_price_cents, qty, tax_rate_bps, station_kind, seat, course, hold, status, note, allergy_note, void_reason, discount_cents, created_at, fired_at FROM order_items WHERE order_id = $1 ORDER BY created_at, id`, [orderId]),
-    db.query<{ orderItemId: string; id: string; name: string; priceDeltaCents: number }>(`SELECT m.order_item_id, m.id, m.name, m.price_delta_cents FROM order_item_modifiers m JOIN order_items i ON i.id = m.order_item_id WHERE i.order_id = $1`, [orderId]),
-    db.query<{ id: string; name: string; kind: string; value: number; reason: string }>(`SELECT id, name, kind, value, reason FROM order_discounts WHERE order_id = $1 ORDER BY created_at`, [orderId]),
-    db.query<OrderView["payments"][number]>(`SELECT id, method, provider, status, amount_cents, tip_cents, created_at FROM payments WHERE order_id = $1 ORDER BY created_at`, [orderId]),
-    db.one<{ s: number }>(`SELECT COALESCE(sum(amount_cents),0)::int AS s FROM refunds WHERE order_id = $1 AND status = 'succeeded'`, [orderId]),
-    db.query<{ id: string; label: string }>(`SELECT t.id, t.label FROM order_tables ot JOIN tables t ON t.id = ot.table_id WHERE ot.order_id = $1 ORDER BY t.label`, [orderId]),
-  ]);
+  const items = await db.query<Omit<ItemView, "modifiers">>(`SELECT id, product_id, name, unit_price_cents, qty, tax_rate_bps, station_kind, seat, course, hold, status, note, allergy_note, void_reason, discount_cents, created_at, fired_at FROM order_items WHERE order_id = $1 ORDER BY created_at, id`, [orderId]);
+  const mods = await db.query<{ orderItemId: string; id: string; name: string; priceDeltaCents: number }>(`SELECT m.order_item_id, m.id, m.name, m.price_delta_cents FROM order_item_modifiers m JOIN order_items i ON i.id = m.order_item_id WHERE i.order_id = $1`, [orderId]);
+  const discounts = await db.query<{ id: string; name: string; kind: string; value: number; reason: string }>(`SELECT id, name, kind, value, reason FROM order_discounts WHERE order_id = $1 ORDER BY created_at`, [orderId]);
+  const payments = await db.query<OrderView["payments"][number]>(`SELECT id, method, provider, status, amount_cents, tip_cents, created_at FROM payments WHERE order_id = $1 ORDER BY created_at`, [orderId]);
+  const refunds = await db.one<{ s: number }>(`SELECT COALESCE(sum(amount_cents),0)::int AS s FROM refunds WHERE order_id = $1 AND status = 'succeeded'`, [orderId]);
+  const tables = await db.query<{ id: string; label: string }>(`SELECT t.id, t.label FROM order_tables ot JOIN tables t ON t.id = ot.table_id WHERE ot.order_id = $1 ORDER BY t.label`, [orderId]);
+
   const itemViews: ItemView[] = items.map((i) => ({ ...i, modifiers: mods.filter((m) => m.orderItemId === i.id).map((m) => ({ id: m.id, name: m.name, priceDeltaCents: m.priceDeltaCents })) }));
   const live = itemViews.filter((i) => i.status !== "void");
   const computed = computeTotals(

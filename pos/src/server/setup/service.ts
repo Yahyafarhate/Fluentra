@@ -38,11 +38,19 @@ async function uniqueTerminalCode(db: Db) {
 }
 
 /** Adds an outlet with its default stations and a first dining room. */
+const DEFAULT_NAMES: Record<string, { kitchen: string; bar: string; pastry: string; room: string }> = {
+  fr: { kitchen: "Cuisine", bar: "Bar", pastry: "Pâtisserie", room: "Salle principale" },
+  en: { kitchen: "Kitchen", bar: "Bar", pastry: "Pastry", room: "Main room" },
+  ar: { kitchen: "Kitchen", bar: "Bar", pastry: "Pastry", room: "Main room" },
+};
+
 export async function createOutletDefaults(db: Db, orgId: string, name: string, timezone = "Africa/Casablanca") {
   const code = await uniqueTerminalCode(db);
+  const org = await db.maybe<{ defaultLocale: string }>(`SELECT default_locale FROM organizations WHERE id = $1`, [orgId]);
+  const n = DEFAULT_NAMES[org?.defaultLocale ?? "en"] ?? DEFAULT_NAMES.en;
   const o = await db.one<{ id: string }>(`INSERT INTO outlets (org_id, name, code, timezone) VALUES ($1,$2,$3,$4) RETURNING id`, [orgId, name, code, timezone]);
-  await db.exec(`INSERT INTO stations (org_id, outlet_id, name, kind, target_seconds) VALUES ($1,$2,'Kitchen','kitchen',900), ($1,$2,'Bar','bar',300), ($1,$2,'Pastry','pastry',600)`, [orgId, o.id]);
-  const room = await db.one<{ id: string }>(`INSERT INTO dining_rooms (org_id, outlet_id, name) VALUES ($1,$2,'Main room') RETURNING id`, [orgId, o.id]);
+  await db.exec(`INSERT INTO stations (org_id, outlet_id, name, kind, target_seconds) VALUES ($1,$2,$3,'kitchen',900), ($1,$2,$4,'bar',300), ($1,$2,$5,'pastry',600)`, [orgId, o.id, n.kitchen, n.bar, n.pastry]);
+  const room = await db.one<{ id: string }>(`INSERT INTO dining_rooms (org_id, outlet_id, name) VALUES ($1,$2,$3) RETURNING id`, [orgId, o.id, n.room]);
   return { id: o.id, code, roomId: room.id };
 }
 

@@ -174,7 +174,7 @@ export async function floorState(db: Db, ctx: Ctx, outletId: string) {
     const o = checks.find((c) => c.tableId === t.id) ?? checks[0];
     const status = !o ? "available" : checks.every((c) => c.billRequestedAt) ? "awaiting_payment" : checks.some((c) => c.sent > 0) ? "ordered" : "occupied";
     const elapsedMin = o ? Math.floor((now - Math.min(...checks.map((c) => c.openedAt.getTime()))) / 60000) : 0;
-    return { ...t, status, checks: checks.length, order: o ? { id: o.id, orderNo: o.orderNo, covers: checks.reduce((a, c) => a + c.covers, 0), serverName: o.serverName, openedAt: o.openedAt, elapsedMin, alert: elapsedMin >= outlet.tableAlertMinutes, drafts: o.drafts } : null };
+    return { ...t, status, checks: checks.length, orders: checks.map((c) => ({ id: c.id, orderNo: c.orderNo, billRequested: !!c.billRequestedAt })), order: o ? { id: o.id, orderNo: o.orderNo, covers: checks.reduce((a, c) => a + c.covers, 0), serverName: o.serverName, openedAt: o.openedAt, elapsedMin, alert: elapsedMin >= outlet.tableAlertMinutes, drafts: o.drafts } : null };
   });
   const noTable = orders.filter((o) => !o.tableId).map((o) => ({ id: o.id, orderNo: o.orderNo, type: o.type, serverName: o.serverName, openedAt: o.openedAt, covers: o.covers, sent: o.sent }));
   return { outlet: { id: outlet.id, name: outlet.name, tableAlertMinutes: outlet.tableAlertMinutes }, rooms: base.rooms, tables, quickOrders: noTable };

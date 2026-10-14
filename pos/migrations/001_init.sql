@@ -291,7 +291,7 @@ CREATE TABLE order_items (
   discount_cents integer NOT NULL DEFAULT 0 CHECK (discount_cents >= 0),
   discount_reason text, discount_approved_by uuid,
   created_by uuid,
-  created_at timestamptz NOT NULL DEFAULT now(),
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),   -- insertion order within one transaction
   fired_at timestamptz, accepted_at timestamptz, started_at timestamptz, ready_at timestamptz, served_at timestamptz,
   FOREIGN KEY (order_id, org_id) REFERENCES orders(id, org_id) ON DELETE CASCADE,
   FOREIGN KEY (product_id, org_id) REFERENCES products(id, org_id) ON DELETE SET NULL (product_id),
