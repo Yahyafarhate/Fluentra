@@ -237,7 +237,7 @@ export async function listReservations(db: Db, ctx: Ctx, f: z.infer<typeof listF
   }
   const rows = await db.query(
     `SELECT r.id, r.code, r.location_id, l.name AS location_name, l.timezone, r.customer_id, r.guest_name, r.guest_phone, r.guest_email, r.party_size, r.service_date,
-            r.start_at, r.end_at, r.status, r.source, r.occasion, r.special_requests, r.internal_notes, r.seating_preference, r.is_vip, r.is_private_event,
+            r.start_at, r.end_at, to_char(r.start_at AT TIME ZONE l.timezone,'HH24:MI') AS time, to_char(r.end_at AT TIME ZONE l.timezone,'HH24:MI') AS end_time, r.status, r.source, r.occasion, r.special_requests, r.internal_notes, r.seating_preference, r.is_vip, r.is_private_event,
             r.deposit_status, r.deposit_amount, r.arrived_at, r.seated_at, r.completed_at,
             COALESCE((SELECT json_agg(json_build_object('id', t.id, 'name', t.name) ORDER BY t.name) FROM reservation_tables rt JOIN tables t ON t.id=rt.table_id WHERE rt.reservation_id=r.id), '[]'::json) AS tables,
             c.allergies, c.dietary, c.vip AS customer_vip,
@@ -247,9 +247,18 @@ export async function listReservations(db: Db, ctx: Ctx, f: z.infer<typeof listF
   return rows;
 }
 
+export async function calendarCounts(db: Db, ctx: Ctx, locationId: string, from: string, to: string) {
+  assertLocationAccess(ctx, locationId);
+  return db.query<{ date: string; reservations: number; covers: number; pending: number; cancelled: number }>(
+    `SELECT service_date::text AS date, count(*) FILTER (WHERE status NOT IN ('cancelled','no_show'))::int AS reservations,
+            COALESCE(sum(party_size) FILTER (WHERE status NOT IN ('cancelled','no_show')),0)::int AS covers,
+            count(*) FILTER (WHERE status='pending')::int AS pending, count(*) FILTER (WHERE status IN ('cancelled','no_show'))::int AS cancelled
+       FROM reservations WHERE org_id=$1 AND location_id=$2 AND service_date BETWEEN $3 AND $4 GROUP BY 1 ORDER BY 1`, [ctx.orgId, locationId, from, to]);
+}
+
 export async function getReservation(db: Db, ctx: Ctx, id: string): Promise<Row> {
   const r = await db.maybe(
-    `SELECT r.*, l.name AS location_name, l.timezone, l.cleaning_workflow, l.no_show_grace_min FROM reservations r JOIN locations l ON l.id=r.location_id
+    `SELECT r.*, to_char(r.start_at AT TIME ZONE l.timezone,'HH24:MI') AS time, to_char(r.end_at AT TIME ZONE l.timezone,'HH24:MI') AS end_time, l.name AS location_name, l.timezone, l.cleaning_workflow, l.no_show_grace_min FROM reservations r JOIN locations l ON l.id=r.location_id
       WHERE r.id=$1 AND r.org_id=$2 AND ($3::uuid[] IS NULL OR r.location_id = ANY($3))`, [id, ctx.orgId, ctx.locationIds]);
   if (!r) throw notFound("Reservation");
   const tables = await db.query(`SELECT t.id, t.name, t.capacity, t.status FROM reservation_tables rt JOIN tables t ON t.id=rt.table_id WHERE rt.reservation_id=$1 ORDER BY t.name`, [id]);

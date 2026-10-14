@@ -6,10 +6,11 @@ import { assertLocationAccess } from "@/lib/auth";
 import { audit } from "@/lib/audit";
 import { badRequest, notFound } from "@/lib/errors";
 import { isDateStr } from "@/lib/time";
+import { utcToLocal } from "@/lib/tz";
 import { rateLimit } from "@/lib/ratelimit";
 import type { Permission } from "@/lib/rbac";
 
-import { bookingInputSchema, createReservation, getReservation, listFilterSchema, listReservations, seatWalkIn, transitionReservation, transitionSchema, updateReservation, updateSchema, walkInSchema } from "../reservations/service";
+import { bookingInputSchema, calendarCounts, createReservation, getReservation, listFilterSchema, listReservations, seatWalkIn, transitionReservation, transitionSchema, updateReservation, updateSchema, walkInSchema } from "../reservations/service";
 import { computeSlots, loadLocation } from "../availability/service";
 import {
   comboSchema, createCombination, createFloor, createSection, createTable, deleteCombination, deleteFloor, deleteSection, deleteTable, floorSchema, getFloorState, getTimeline,
@@ -43,6 +44,16 @@ function def<P extends Permission | Permission[] | null>(method: string, path: s
 }
 const uuid = z.string().uuid();
 const dateStr = z.string().refine(isDateStr, "Invalid date");
+
+def("GET", "/today", null, "Today's date in the restaurant's time zone (resolved by the database)", async (a) => {
+  const q = a.query(z.object({ locationId: uuid }));
+  assertLocationAccess(a.ctx, q.locationId);
+  return withOrg(a.ctx.orgId, async (db) => {
+    const loc = await loadLocation(db, q.locationId);
+    const now = await utcToLocal(db, new Date(), loc.timezone);
+    return { date: now.date, time: now.time, timezone: loc.timezone };
+  });
+});
 
 // ───────────── Locations & schedule ─────────────
 def("GET", "/locations", null, "Locations the caller may access", async ({ ctx }) =>
@@ -98,14 +109,18 @@ def("DELETE", "/special-days/:id", "settings.manage", "Remove a special day", as
 
 // ───────────── Reservations ─────────────
 def("GET", "/availability", "reservations.read", "Available slots (staff view, includes suggested tables)", async (a) => {
-  const q = a.query(z.object({ locationId: uuid, date: dateStr, partySize: z.coerce.number().int().min(1).max(500), channel: z.enum(["staff", "online"]).default("staff") }));
+  const q = a.query(z.object({ locationId: uuid, date: dateStr, partySize: z.coerce.number().int().min(1).max(500), channel: z.enum(["staff", "online"]).default("staff"), excludeReservationId: uuid.optional() }));
   assertLocationAccess(a.ctx, q.locationId);
   return withOrg(a.ctx.orgId, async (db) => {
     const loc = await loadLocation(db, q.locationId);
-    const res = await computeSlots(db, loc, q.date, { channel: q.channel, partySize: q.partySize });
+    const res = await computeSlots(db, loc, q.date, { channel: q.channel, partySize: q.partySize, excludeReservationId: q.excludeReservationId });
     const names = await db.query<{ id: string; name: string }>(`SELECT id, name FROM tables WHERE location_id=$1`, [q.locationId]);
     return { ...res, slots: res.slots.map((s) => ({ ...s, tables: s.tableIds?.map((id) => names.find((n) => n.id === id)?.name) })) };
   });
+});
+def("GET", "/reservations/calendar", "reservations.read", "Reservation and cover counts per day (calendar view)", async (a) => {
+  const q = a.query(z.object({ locationId: uuid, from: dateStr, to: dateStr }));
+  return withOrg(a.ctx.orgId, async (db) => ({ days: await calendarCounts(db, a.ctx, q.locationId, q.from, q.to) }));
 });
 def("GET", "/reservations", "reservations.read", "Search / filter reservations", async (a) => {
   const f = a.query(listFilterSchema);

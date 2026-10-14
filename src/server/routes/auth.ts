@@ -4,9 +4,7 @@ import { json, publicRoute, sessionOnly } from "@/lib/api";
 import { login, logout, requestPasswordReset, resetPassword, sessionCookie, getCtx, parseCookies, SESSION_COOKIE, switchOrg, listMemberships, getSessionUser } from "@/lib/auth";
 import { signup, signupSchema } from "../tenants/signup";
 import { acceptInvitation, acceptSchema, getInvitation } from "../tenants/team";
-import { withOrg } from "@/lib/db";
-import { ROLE_PERMISSIONS } from "@/lib/rbac";
-import { getPlanInfo } from "../billing/limits";
+import { buildMe } from "../me";
 import { unauthorized } from "@/lib/errors";
 
 export const authRouter = new Router("/api/auth");
@@ -59,17 +57,7 @@ authRouter.add("GET", "/me", "session", "Current user, organization, role, permi
   const ctx = await getCtx(cookieOf(a.req));
   const memberships = await listMemberships(a.ctx.user.id);
   if (!ctx) return { user: a.ctx.user, organization: null, memberships };
-  const data = await withOrg(ctx.orgId, async (db) => ({
-    locations: await db.query(`SELECT id, name, slug, timezone, currency, default_locale FROM locations WHERE org_id=$1 AND status='active' AND ($2::uuid[] IS NULL OR id = ANY($2)) ORDER BY name`, [ctx.orgId, ctx.locationIds]),
-    plan: await getPlanInfo(db, ctx.orgId),
-  }));
-  return {
-    user: a.ctx.user,
-    organization: { id: ctx.orgId, name: ctx.org.name, status: ctx.org.status, planId: ctx.org.planId },
-    role: ctx.role, permissions: [...ROLE_PERMISSIONS[ctx.role]], locationIds: ctx.locationIds,
-    features: data.plan.features, locations: data.locations, memberships,
-    trialEndsAt: data.plan.trialEndsAt,
-  };
+  return { ...(await buildMe(ctx)), memberships };
 }));
 
 authRouter.add("POST", "/switch-org", "session", "Switch the active organization", sessionOnly(async (a) => {

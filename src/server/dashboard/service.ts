@@ -50,15 +50,15 @@ export async function getDashboard(db: Db, ctx: Ctx, q: DashboardQuery) {
        FROM visits v WHERE v.org_id=$1 AND v.location_id = ANY($2) AND (v.seated_at AT TIME ZONE (SELECT timezone FROM locations WHERE id=v.location_id))::date BETWEEN $3 AND $4`, [ctx.orgId, ids, from, to]);
 
   const upcoming = await db.query(
-    `SELECT r.id, r.code, r.guest_name, r.party_size, r.start_at, r.status, r.is_vip, r.special_requests, r.occasion, l.name AS location_name,
+    `SELECT r.id, r.code, r.guest_name, r.party_size, r.start_at, to_char(r.start_at AT TIME ZONE l.timezone,'HH24:MI') AS time, r.status, r.is_vip, r.special_requests, r.occasion, l.name AS location_name,
             COALESCE((SELECT string_agg(t.name, ' + ' ORDER BY t.name) FROM reservation_tables rt JOIN tables t ON t.id=rt.table_id WHERE rt.reservation_id=r.id), NULL) AS table_names
        FROM reservations r JOIN locations l ON l.id=r.location_id
       WHERE r.org_id=$1 AND r.location_id = ANY($2) AND r.service_date BETWEEN $3 AND $4 AND r.status IN ('pending','confirmed','arrived') AND ($5::uuid IS NULL OR r.service_id=$5)
       ORDER BY r.start_at LIMIT 12`, [ctx.orgId, ids, from, to, svc]);
 
   const vips = await db.query(
-    `SELECT r.id, r.guest_name, r.party_size, r.start_at, r.status, r.special_requests, r.occasion, c.allergies, c.dietary
-       FROM reservations r LEFT JOIN customers c ON c.id=r.customer_id
+    `SELECT r.id, r.guest_name, r.party_size, r.start_at, to_char(r.start_at AT TIME ZONE l.timezone,'HH24:MI') AS time, r.status, r.special_requests, r.occasion, c.allergies, c.dietary
+       FROM reservations r JOIN locations l ON l.id=r.location_id LEFT JOIN customers c ON c.id=r.customer_id
       WHERE r.org_id=$1 AND r.location_id = ANY($2) AND r.service_date BETWEEN $3 AND $4 AND r.status NOT IN ('cancelled','no_show','completed')
         AND ($5::uuid IS NULL OR r.service_id=$5)
         AND (r.is_vip OR r.special_requests IS NOT NULL OR r.occasion IS NOT NULL OR cardinality(c.allergies) > 0)
