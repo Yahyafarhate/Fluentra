@@ -7,7 +7,6 @@ import { enqueueNotification, manageToken, resolveTemplate, unsubscribeToken } f
 import { CONSENT_REQUIRED_KEYS, render } from "../notifications/templates";
 import type { ChannelName } from "../notifications/adapters";
 import { runRetentionSweep } from "../customers/service";
-import { DateTime } from "luxon";
 
 export const TRIGGERS = ["reservation_created", "reservation_confirmed", "reservation_modified", "reservation_cancelled", "reminder_before", "visit_completed", "feedback_request", "birthday", "anniversary", "waitlist_ready"] as const;
 export type Trigger = (typeof TRIGGERS)[number];
@@ -68,19 +67,22 @@ export async function seedDefaultAutomations(db: Db, orgId: string) {
   }
 }
 
-const dateFmt = (d: Date, tz: string, locale: string) =>
-  new Intl.DateTimeFormat(locale === "ar" ? "ar-MA-u-nu-latn" : locale === "en" ? "en-GB" : "fr-FR", { weekday: "long", day: "numeric", month: "long", timeZone: tz }).format(d);
+/** Formats a calendar date (already resolved to the restaurant's local date by the database) — no tz math here. */
+const dateFmt = (localDate: string, locale: string) => {
+  const [y, m, d] = localDate.split("-").map(Number);
+  return new Intl.DateTimeFormat(locale === "ar" ? "ar-MA-u-nu-latn" : locale === "en" ? "en-GB" : "fr-FR", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" }).format(new Date(Date.UTC(y, m - 1, d)));
+};
 
 interface ResCtx {
   id: string; locationId: string; customerId: string | null; code: string; guestName: string; guestPhone: string | null; guestEmail: string | null;
-  partySize: number; status: string; source: string; isVip: boolean; startAt: Date; language: string | null; customerEmail: string | null; customerPhone: string | null;
+  partySize: number; status: string; source: string; isVip: boolean; startAt: Date; localDate: string; localTime: string; language: string | null; customerEmail: string | null; customerPhone: string | null;
   customerLanguage: string | null; locName: string; tz: string; address: string | null; city: string | null; policyText: string | null; locDefaultLocale: string; cancelDeadlineHours: number;
   consentEmail: boolean | null; consentSms: boolean | null; consentWhatsapp: boolean | null;
 }
 
 async function loadReservationCtx(db: Db, id: string): Promise<ResCtx | null> {
   return db.maybe<ResCtx>(
-    `SELECT r.id, r.location_id, r.customer_id, r.code, r.guest_name, r.guest_phone, r.guest_email, r.party_size, r.status, r.source, r.is_vip, r.start_at, r.language,
+    `SELECT r.id, r.location_id, r.customer_id, r.code, r.guest_name, r.guest_phone, r.guest_email, r.party_size, r.status, r.source, r.is_vip, r.start_at, to_char(r.start_at AT TIME ZONE l.timezone, 'YYYY-MM-DD') AS local_date, to_char(r.start_at AT TIME ZONE l.timezone, 'HH24:MI') AS local_time, r.language,
             c.email AS customer_email, c.phone AS customer_phone, c.language AS customer_language,
             c.consent_email, c.consent_sms, c.consent_whatsapp,
             l.name AS loc_name, l.timezone AS tz, l.address, l.city, l.policy_text, l.default_locale AS loc_default_locale, l.cancel_deadline_hours
@@ -136,7 +138,7 @@ async function fireReservationRule(db: Db, rule: RuleRow, r: ResCtx, version: st
   const locale = r.language ?? r.customerLanguage ?? r.locDefaultLocale ?? "fr";
   const tpl = await resolveTemplate(db, rule.orgId, rule.templateKey, target.channel, locale);
   const vars = {
-    guest_name: r.guestName, restaurant: r.locName, date: dateFmt(r.startAt, r.tz, locale), time: DateTime.fromJSDate(r.startAt, { zone: r.tz }).toFormat("HH:mm"),
+    guest_name: r.guestName, restaurant: r.locName, date: dateFmt(r.localDate, locale), time: r.localTime,
     party_size: r.partySize, code: r.code, manage_link: `${env.appUrl}/r/${manageToken(r.id)}`, address: [r.address, r.city].filter(Boolean).join(", "),
     policy: r.policyText ?? "", unsubscribe_link: r.customerId ? `${env.appUrl}/u/${unsubscribeToken(r.customerId, target.channel)}` : "", ...extra,
   };

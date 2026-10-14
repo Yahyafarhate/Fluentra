@@ -5,7 +5,8 @@ import { assertLocationAccess } from "@/lib/auth";
 import { audit } from "@/lib/audit";
 import { AppError, badRequest, conflict, forbidden, notFound, unprocessable } from "@/lib/errors";
 import { normalizeEmail, normalizePhone } from "@/lib/phone";
-import { isDateStr, isTimeStr, timeToMin, serviceDateOf, timeOf } from "@/lib/time";
+import { isDateStr, isTimeStr, timeToMin } from "@/lib/time";
+import { utcToLocal } from "@/lib/tz";
 import { randomToken, sha256, shortCode } from "@/lib/ids";
 import { evaluateStart, loadDay, loadLocation, lockLocation, windowFor, type DayData, type LocationRow } from "../availability/service";
 import { pickTables, validateManualAssignment } from "../availability/engine";
@@ -284,11 +285,12 @@ export type UpdateInput = z.infer<typeof updateSchema>;
 
 interface ResRow {
   id: string; orgId: string; locationId: string; status: Status; partySize: number; startAt: Date; endAt: Date; serviceDate: string;
-  customerId: string | null; guestPhone: string | null; guestEmail: string | null; updatedAt: Date;
+  customerId: string | null; guestPhone: string | null; guestEmail: string | null; updatedAt: Date; startLocal: string;
 }
 
 async function lockReservation(db: Db, orgId: string, id: string): Promise<ResRow> {
-  const r = await db.maybe<ResRow>(`SELECT * FROM reservations WHERE id=$1 AND org_id=$2 FOR UPDATE`, [id, orgId]);
+  const r = await db.maybe<ResRow>(
+    `SELECT r.*, to_char(r.start_at AT TIME ZONE l.timezone, 'HH24:MI') AS start_local FROM reservations r JOIN locations l ON l.id = r.location_id WHERE r.id=$1 AND r.org_id=$2 FOR UPDATE OF r`, [id, orgId]);
   if (!r) throw notFound("Reservation");
   return r;
 }
@@ -337,8 +339,8 @@ async function applyUpdate(db: Db, loc: LocationRow, r: ResRow, input: UpdateInp
   const set = (col: string, v: unknown) => { params.push(v); sets.push(`${col} = $${params.length}`); };
   const nextParty = input.partySize ?? r.partySize;
   const nextDate = input.date ?? r.serviceDate;
-  const nextTime = input.time ?? timeOf(r.startAt, loc.timezone);
-  const timeChanged = nextDate !== r.serviceDate || nextTime !== timeOf(r.startAt, loc.timezone);
+  const nextTime = input.time ?? r.startLocal;
+  const timeChanged = nextDate !== r.serviceDate || nextTime !== r.startLocal;
   const partyChanged = nextParty !== r.partySize;
   if ((timeChanged || partyChanged || input.tableIds) && r.status === "seated" && (timeChanged || partyChanged)) {
     throw conflict("A seated reservation's time or party size cannot be changed", "INVALID_STATE");
@@ -423,7 +425,7 @@ export async function transitionReservationTx(db: Db, orgId: string, id: string,
       break;
     case "seat": {
       if (input.tableIds?.length) {
-        const day = await loadDay(db, loc, serviceDateOf(r.startAt, loc.timezone), { excludeReservationId: id, now });
+        const day = await loadDay(db, loc, r.serviceDate, { excludeReservationId: id, now });
         const end = new Date(r.endAt.getTime() + loc.bufferMin * 60_000);
         const err = validateManualAssignment({ tables: day.tables, combos: day.combos, busy: day.busy, tableIds: input.tableIds, start: Math.min(r.startAt.getTime(), now.getTime()), end: end.getTime(), party: r.partySize });
         if (err) throw conflict(`Cannot seat at the selected table(s): ${err}`, err);
@@ -478,7 +480,7 @@ export async function transitionReservationTx(db: Db, orgId: string, id: string,
     }
     case "reinstate": {
       // re-run allocation: the table may have been given away meanwhile
-      await reallocate(db, loc, r, { date: r.serviceDate, time: timeOf(r.startAt, loc.timezone), partySize: r.partySize, channel: "staff", force: true, now });
+      await reallocate(db, loc, r, { date: r.serviceDate, time: r.startLocal, partySize: r.partySize, channel: "staff", force: true, now });
       await db.exec(`UPDATE reservations SET status='confirmed', no_show_at=NULL WHERE id=$1`, [id]);
       break;
     }
@@ -510,9 +512,10 @@ export async function seatWalkIn(ctx: Ctx, input: z.infer<typeof walkInSchema>) 
     const loc = await loadLocation(db, input.locationId);
     assertLocationAccess(ctx, loc.id);
     const now = new Date();
-    const date = serviceDateOf(now, loc.timezone);
+    const local = await utcToLocal(db, now, loc.timezone);
+    const date = local.date;
     const res = await createReservationTx(db, {
-      locationId: loc.id, date, time: timeOf(now, loc.timezone), partySize: input.partySize, guestName: input.guestName || "Walk-in",
+      locationId: loc.id, date, time: local.time, partySize: input.partySize, guestName: input.guestName || "Walk-in",
       guestPhone: input.guestPhone ?? null, guestEmail: input.guestEmail ?? null, source: "walk_in", tableIds: input.tableIds, internalNotes: input.notes,
       allowDuplicate: true, force: true,
     }, { orgId: ctx.orgId, actor: { kind: "staff", ctx }, now, seatNow: true });
@@ -534,18 +537,18 @@ export async function getPublicReservation(token: string) {
   return withSystem(async (db) => {
     const r = await db.maybe<{
       id: string; code: string; status: Status; partySize: number; startAt: Date; endAt: Date; guestName: string; occasion: string | null; specialRequests: string | null;
-      depositStatus: string; depositAmount: number; locSlug: string; locName: string; timezone: string; address: string | null; city: string | null; phone: string | null;
+      depositStatus: string; depositAmount: number; startLocal: string; locSlug: string; locName: string; timezone: string; address: string | null; city: string | null; phone: string | null;
       cancelDeadlineHours: number; policyText: string | null; brandColor: string; defaultLocale: string; serviceDate: string; locationId: string; orgId: string; onlineBookingEnabled: boolean;
     }>(
       `SELECT r.id, r.org_id, r.location_id, r.code, r.status, r.party_size, r.start_at, r.end_at, r.guest_name, r.occasion, r.special_requests, r.deposit_status, r.deposit_amount, r.service_date,
-              l.slug AS loc_slug, l.name AS loc_name, l.timezone, l.address, l.city, l.phone, l.cancel_deadline_hours, l.policy_text, l.brand_color, l.default_locale, l.online_booking_enabled
+              to_char(r.start_at AT TIME ZONE l.timezone, 'HH24:MI') AS start_local, l.slug AS loc_slug, l.name AS loc_name, l.timezone, l.address, l.city, l.phone, l.cancel_deadline_hours, l.policy_text, l.brand_color, l.default_locale, l.online_booking_enabled
          FROM reservations r JOIN locations l ON l.id=r.location_id JOIN organizations o ON o.id=r.org_id
         WHERE r.id=$1 AND o.status IN ('trial','active','past_due')`, [id]);
     if (!r) throw notFound("Reservation");
     const deadline = new Date(r.startAt.getTime() - r.cancelDeadlineHours * 3600_000);
     const editable = (r.status === "pending" || r.status === "confirmed") && r.startAt > new Date();
     return {
-      code: r.code, status: r.status, partySize: r.partySize, startAt: r.startAt, date: r.serviceDate, time: timeOf(r.startAt, r.timezone),
+      code: r.code, status: r.status, partySize: r.partySize, startAt: r.startAt, date: r.serviceDate, time: r.startLocal,
       guestName: r.guestName, occasion: r.occasion, specialRequests: r.specialRequests,
       deposit: { status: r.depositStatus, amount: r.depositAmount },
       restaurant: { slug: r.locSlug, name: r.locName, address: r.address, city: r.city, phone: r.phone, timezone: r.timezone, brandColor: r.brandColor, locale: r.defaultLocale, policy: r.policyText },

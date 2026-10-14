@@ -3,7 +3,8 @@ import { notifyChange, type Db } from "@/lib/db";
 import { assertLocationAccess, type Ctx } from "@/lib/auth";
 import { audit } from "@/lib/audit";
 import { badRequest, conflict, notFound, unprocessable } from "@/lib/errors";
-import { dayBounds, isDateStr, timeOf } from "@/lib/time";
+import { isDateStr } from "@/lib/time";
+import { localDayBounds, utcToLocal } from "@/lib/tz";
 import { loadLocation } from "../availability/service";
 import { shortCode } from "@/lib/ids";
 
@@ -221,11 +222,11 @@ export const timelineQuery = z.object({ locationId: z.string().uuid(), date: z.s
 export async function getTimeline(db: Db, ctx: Ctx, locationId: string, date: string) {
   assertLocationAccess(ctx, locationId);
   const loc = await loadLocation(db, locationId);
-  const [from, to] = dayBounds(date, loc.timezone);
+  const [from, to] = await localDayBounds(db, date, loc.timezone);
   const tables = await db.query(`SELECT t.id, t.name, t.capacity, t.section_id, s.name AS section_name FROM tables t LEFT JOIN sections s ON s.id=t.section_id WHERE t.org_id=$1 AND t.location_id=$2 AND t.active ORDER BY t.name`, [ctx.orgId, locationId]);
   const blocks = await db.query(
     `SELECT rt.table_id, r.id, r.code, r.guest_name, r.party_size, r.status, r.is_vip, lower(rt.during) AS start_at, upper(rt.during) AS end_at
        FROM reservation_tables rt JOIN reservations r ON r.id=rt.reservation_id
       WHERE rt.location_id=$1 AND rt.during && tstzrange($2,$3) AND r.status IN ('pending','confirmed','arrived','seated','completed') ORDER BY lower(rt.during)`, [locationId, from, to]);
-  return { date, timezone: loc.timezone, dayStart: from, dayEnd: to, tables, blocks, nowLabel: timeOf(new Date(), loc.timezone) };
+  return { date, timezone: loc.timezone, dayStart: from, dayEnd: to, tables, blocks, nowLabel: (await utcToLocal(db, new Date(), loc.timezone)).time };
 }

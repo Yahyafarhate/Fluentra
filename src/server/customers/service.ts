@@ -224,7 +224,7 @@ export async function mergeCustomers(db: Db, ctx: Ctx, sourceId: string, targetI
     `SELECT * FROM customers WHERE org_id=$1 AND id = ANY($2) AND merged_into IS NULL AND anonymized_at IS NULL ORDER BY id FOR UPDATE`, [ctx.orgId, [sourceId, targetId]]);
   const src = rows.find((r) => r.id === sourceId), tgt = rows.find((r) => r.id === targetId);
   if (!src || !tgt) throw notFound("Customer");
-  for (const t of ["reservations", "visits", "waitlist_entries", "notifications", "feedback", "consents"]) {
+  for (const t of ["reservations", "visits", "waitlist_entries", "notifications", "feedback"]) {
     await db.exec(`UPDATE ${t} SET customer_id=$1 WHERE org_id=$2 AND customer_id=$3`, [targetId, ctx.orgId, sourceId]);
   }
   await db.exec(`DELETE FROM campaign_recipients WHERE org_id=$1 AND customer_id=$2 AND campaign_id IN (SELECT campaign_id FROM campaign_recipients WHERE customer_id=$3)`, [ctx.orgId, sourceId, targetId]);
@@ -239,7 +239,11 @@ export async function mergeCustomers(db: Db, ctx: Ctx, sourceId: string, targetI
         consent_email = consent_email OR $12, consent_sms = consent_sms OR $13, consent_whatsapp = consent_whatsapp OR $14
       WHERE id=$1 AND org_id=$2`,
     [targetId, ctx.orgId, src.phone, src.email, src.vip, uniq(tgt.tags, src.tags), uniq(tgt.dietary, src.dietary), uniq(tgt.allergies, src.allergies),
-      src.birthday, src.anniversary, src.notes, src.consent_email, src.consent_sms, src.consent_whatsapp]);
+      src.birthday, src.anniversary, src.notes, !!src.consentEmail, !!src.consentSms, !!src.consentWhatsapp]);
+  // the consent ledger is append-only: record inherited grants instead of rewriting history
+  for (const [ch, col] of [["email", "consentEmail"], ["sms", "consentSms"], ["whatsapp", "consentWhatsapp"]] as const) {
+    if (src[col] && !tgt[col]) await db.exec(`INSERT INTO consents (org_id, customer_id, channel, granted, source, note, created_by) VALUES ($1,$2,$3,true,'merge',$4,$5)`, [ctx.orgId, targetId, ch, `Inherited from merged profile ${sourceId}`, ctx.user.id]);
+  }
   await audit(db, ctx, "customer.merge", "customer", targetId, { mergedFrom: sourceId, sourceName: src.name, targetName: tgt.name });
 }
 

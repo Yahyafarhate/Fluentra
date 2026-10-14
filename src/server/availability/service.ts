@@ -1,6 +1,7 @@
 import type { Db } from "@/lib/db";
 import { notFound } from "@/lib/errors";
-import { zonedToUtc, isoWeekday, minToTime, dayBounds, todayIn, daysBetween, serviceDateOf } from "@/lib/time";
+import { isoWeekday, minToTime, daysBetween } from "@/lib/time";
+import { noonOffsetMin, todayLocal } from "@/lib/tz";
 import {
   durationFor, pickTables, resolveWindows, slotTimes,
   type BusyInterval, type ComboLite, type DurationRule, type ServiceRow, type SpecialDayRow, type TableLite, type ServiceWindow,
@@ -37,6 +38,9 @@ export interface DayData {
   combos: ComboLite[];
   busy: BusyInterval[];
   reservations: Array<{ id: string; startAt: Date; partySize: number; serviceId: string | null }>;
+  /** local wall-clock minute-of-day -> UTC instant for this date (offset resolved by the database) */
+  utcAt: (minuteOfDay: number) => Date;
+  today: string;
 }
 
 export async function loadTables(db: Db, locationId: string): Promise<{ tables: TableLite[]; combos: ComboLite[] }> {
@@ -79,13 +83,17 @@ export async function loadDay(db: Db, loc: LocationRow, date: string, opts: { ex
     `SELECT closed, label, to_char(start_time,'HH24:MI') AS start_time, to_char(last_seating,'HH24:MI') AS last_seating FROM special_days WHERE location_id=$1 AND date=$2`, [loc.id, date]);
   const res = resolveWindows(services, isoWeekday(date), loc.slotIntervalMin, special);
   const { tables, combos } = await loadTables(db, loc.id);
-  const [dayStart, dayEnd] = dayBounds(date, loc.timezone);
-  const busy = await loadBusy(db, loc.id, new Date(dayStart.getTime() - 12 * 3600_000), new Date(dayEnd.getTime() + 12 * 3600_000), opts);
+  const offsetMin = await noonOffsetMin(db, date, loc.timezone);
+  const [y, m, d] = date.split("-").map(Number);
+  const midnight = Date.UTC(y, m - 1, d);
+  const utcAt = (min: number) => new Date(midnight + (min - offsetMin) * 60_000);
+  const busy = await loadBusy(db, loc.id, new Date(utcAt(0).getTime() - 12 * 3600_000), new Date(utcAt(1440).getTime() + 12 * 3600_000), opts);
   const reservations = await db.query<{ id: string; startAt: Date; partySize: number; serviceId: string | null }>(
     `SELECT id, start_at, party_size, service_id FROM reservations
       WHERE location_id = $1 AND service_date = $2 AND status IN ('pending','confirmed','arrived','seated','completed')
         AND ($3::uuid IS NULL OR id <> $3)`, [loc.id, date, opts.excludeReservationId ?? null]);
-  return { loc, windows: res.windows, closed: res.closed, closedLabel: res.label, tables, combos, busy, reservations };
+  const today = await todayLocal(db, loc.timezone, opts.now);
+  return { loc, windows: res.windows, closed: res.closed, closedLabel: res.label, tables, combos, busy, reservations, utcAt, today };
 }
 
 export type SlotReason = "past" | "notice" | "window" | "party_small" | "party_large" | "pacing" | "service_cap" | "full" | "closed";
@@ -106,8 +114,7 @@ export interface SlotQuery {
 export function evaluateStart(day: DayData, date: string, startMin: number, w: ServiceWindow | null, q: SlotQuery): Slot {
   const { loc } = day;
   const now = q.now ?? new Date();
-  const start = zonedToUtc(date, minToTime(startMin % 1440), loc.timezone);
-  const startAt = startMin >= 1440 ? new Date(start.getTime() + 86400000) : start;
+  const startAt = day.utcAt(startMin);
   const durationMin = durationFor(loc.durationRules, q.partySize);
   const end = new Date(startAt.getTime() + durationMin * 60_000);
   const base: Slot = {
@@ -121,7 +128,7 @@ export function evaluateStart(day: DayData, date: string, startMin: number, w: S
     if (q.partySize < loc.minParty) return fail("party_small");
     if (q.partySize > loc.maxPartyOnline) return fail("party_large");
     if (startAt.getTime() < now.getTime() + loc.minNoticeMin * 60_000) return fail("notice");
-    if (daysBetween(todayIn(loc.timezone, now), date) > loc.bookingWindowDays) return fail("window");
+    if (daysBetween(day.today, date) > loc.bookingWindowDays) return fail("window");
   } else {
     if (q.partySize > loc.maxParty) return fail("party_large");
     if (startAt.getTime() < now.getTime() - 3 * 3600_000) return fail("past");
@@ -155,5 +162,3 @@ export async function computeSlots(db: Db, loc: LocationRow, date: string, q: Sl
 export function windowFor(day: DayData, startMin: number): ServiceWindow | null {
   return day.windows.find((w) => startMin >= w.startMin && startMin <= w.lastSeatingMin) ?? null;
 }
-
-export const dateOf = (loc: Pick<LocationRow, "timezone">, d: Date) => serviceDateOf(d, loc.timezone);

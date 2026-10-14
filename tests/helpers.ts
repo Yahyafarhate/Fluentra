@@ -2,7 +2,8 @@ import { randomUUID } from "node:crypto";
 import { withSystem } from "@/lib/db";
 import { hashPassword, type Ctx } from "@/lib/auth";
 import type { Role } from "@/lib/rbac";
-import { addDays, todayIn } from "@/lib/time";
+import { DateTime } from "luxon";
+import { addDays } from "@/lib/time";
 import { seedDefaultAutomations } from "@/server/automation/service";
 
 export interface Tenant {
@@ -49,7 +50,8 @@ export async function addMember(t: Tenant, role: Role, locationIds: string[] | n
   });
 }
 
-export const futureDate = (days = 3, tz = "Africa/Casablanca") => addDays(todayIn(tz), days);
+/** Test helper: calendar date `days` from now. Uses UTC+1 wall clock; tests avoid asserting on the current day boundary. */
+export const futureDate = (days = 3, tz = "Africa/Casablanca") => addDays(DateTime.now().setZone(tz).toISODate()!, days);
 
 export function booking(t: Tenant, over: Record<string, unknown> = {}) {
   const n = randomUUID().slice(0, 6);

@@ -1,7 +1,8 @@
 import { z } from "zod";
 import type { Db } from "@/lib/db";
 import { assertLocationAccess, type Ctx } from "@/lib/auth";
-import { addDays, daysBetween, isDateStr, todayIn, isoWeekday } from "@/lib/time";
+import { addDays, daysBetween, isDateStr, isoWeekday } from "@/lib/time";
+import { todayLocal } from "@/lib/tz";
 import { hasFeature } from "../billing/limits";
 import { badRequest } from "@/lib/errors";
 
@@ -60,7 +61,7 @@ export async function getAnalytics(db: Db, ctx: Ctx, q: AnalyticsQuery) {
     `SELECT extract(hour FROM r.start_at AT TIME ZONE l.timezone)::int AS hour, count(*)::int AS reservations, COALESCE(sum(r.party_size),0)::int AS covers
        FROM ${R} AND r.status NOT IN ('cancelled','no_show') GROUP BY 1 ORDER BY 1`, P);
 
-  const bySource = await db.query(
+  const bySource = await db.query<{ source: string; reservations: number; covers: number; cancelled: number; noShow: number }>(
     `SELECT r.source, count(*)::int AS reservations, COALESCE(sum(r.party_size) FILTER (WHERE r.status NOT IN ('cancelled','no_show')),0)::int AS covers,
             count(*) FILTER (WHERE r.status='cancelled')::int AS cancelled, count(*) FILTER (WHERE r.status='no_show')::int AS no_show
        FROM ${R} GROUP BY 1 ORDER BY reservations DESC`, P);
@@ -126,7 +127,7 @@ export async function getAnalytics(db: Db, ctx: Ctx, q: AnalyticsQuery) {
       cancellationRatePct: pct(summary.cancelled, summary.total), noShowRatePct: pct(summary.noShow, summary.due + summary.noShow),
       completed: summary.completed, cancelled: summary.cancelled, noShows: summary.noShow,
     },
-    daily, byService, byWeekday, byHour, bySource: bySource.map((s: Record<string, number | string>) => ({ ...s, noShowRatePct: pct(Number(s.noShow), Number(s.reservations) - Number(s.cancelled)) })),
+    daily, byService, byWeekday, byHour, bySource: bySource.map((s) => ({ ...s, noShowRatePct: pct(s.noShow, s.reservations - s.cancelled) })),
     seating: { avgDurationMin: dur.avgMin, visitsMeasured: dur.visits },
     utilization: { tableUtilizationPct: util.availableMin ? pct(util.occupiedMin ?? 0, util.availableMin) : null, basis: "occupied table-minutes of completed visits ÷ (tables × scheduled service minutes)" },
     walkIns: { waitlistEntries: walkins.entries, seated: walkins.seated, conversionPct: pct(walkins.seated, walkins.entries) },
@@ -146,7 +147,7 @@ export async function getForecast(db: Db, ctx: Ctx, locationId: string | undefin
   if (locationId) assertLocationAccess(ctx, locationId);
   const locs = await db.query<{ id: string; timezone: string }>(`SELECT id, timezone FROM locations WHERE org_id=$1 AND status='active' AND ($2::uuid IS NULL OR id=$2) AND ($3::uuid[] IS NULL OR id = ANY($3))`, [ctx.orgId, locationId ?? null, ctx.locationIds]);
   if (!locs.length) return { available: true as const, days: [] };
-  const today = todayIn(locs[0].timezone);
+  const today = await todayLocal(db, locs[0].timezone);
   const hist = await db.query<{ date: string; covers: number }>(
     `SELECT service_date::text AS date, sum(party_size)::int AS covers FROM reservations
       WHERE org_id=$1 AND location_id = ANY($2) AND service_date BETWEEN $3 AND $4 AND status IN ('completed','seated') GROUP BY 1`, [ctx.orgId, locs.map((l) => l.id), addDays(today, -70), addDays(today, -1)]);

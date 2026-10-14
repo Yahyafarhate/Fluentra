@@ -1,7 +1,8 @@
 import type { Db } from "@/lib/db";
 import type { Ctx } from "@/lib/auth";
 import { assertLocationAccess } from "@/lib/auth";
-import { addDays, todayIn } from "@/lib/time";
+import { addDays } from "@/lib/time";
+import { todayLocal } from "@/lib/tz";
 import { getFloorState } from "../floor/service";
 import { listWaitlist } from "../waitlist/service";
 
@@ -20,7 +21,7 @@ export async function getDashboard(db: Db, ctx: Ctx, q: DashboardQuery) {
     [ctx.orgId, q.locationId ?? null, ctx.locationIds]);
   if (!locs.length) return { empty: true as const, locations: [] };
   const tz = locs[0].timezone;
-  const today = todayIn(tz);
+  const today = await todayLocal(db, tz);
   const from = q.from ?? q.date ?? today;
   const to = q.to ?? q.date ?? from;
   const ids = locs.map((l) => l.id);

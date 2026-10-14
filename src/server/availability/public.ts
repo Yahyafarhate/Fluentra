@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { withSystem, withOrg } from "@/lib/db";
 import { notFound, forbidden, badRequest } from "@/lib/errors";
-import { isDateStr, todayIn, addDays, daysBetween } from "@/lib/time";
+import { isDateStr, addDays, daysBetween } from "@/lib/time";
+import { todayLocal } from "@/lib/tz";
 import { computeSlots, loadLocation } from "./service";
 import { getPlanInfo } from "../billing/limits";
 
@@ -21,7 +22,7 @@ export async function getPublicRestaurant(slug: string) {
     const plan = await getPlanInfo(db, ref.orgId);
     const sections = await db.query(`SELECT DISTINCT s.name, s.kind FROM sections s JOIN tables t ON t.section_id=s.id AND t.active AND t.bookable_online WHERE s.location_id=$1 ORDER BY s.name`, [loc.id]);
     const maxCap = await db.one<{ n: number | null }>(`SELECT max(capacity) AS n FROM tables WHERE location_id=$1 AND active AND bookable_online`, [loc.id]);
-    const today = todayIn(loc.timezone);
+    const today = await todayLocal(db, loc.timezone);
     const branded = plan.features.includes("custom_branding");
     return {
       slug: loc.slug, name: loc.name, description: loc.description, address: loc.address, city: loc.city, phone: loc.phone, email: loc.email, website: loc.website,
@@ -43,7 +44,7 @@ export async function getPublicSlots(slug: string, q: z.infer<typeof publicSlots
   return withOrg(ref.orgId, async (db) => {
     const loc = await loadLocation(db, ref.id);
     if (!loc.onlineBookingEnabled) throw forbidden("Online booking is not available", "ONLINE_BOOKING_DISABLED");
-    const today = todayIn(loc.timezone);
+    const today = await todayLocal(db, loc.timezone);
     if (daysBetween(today, q.date) < 0) throw badRequest("Pick a date in the future", "IN_THE_PAST");
     const res = await computeSlots(db, loc, q.date, { channel: "online", partySize: q.partySize });
     return {
