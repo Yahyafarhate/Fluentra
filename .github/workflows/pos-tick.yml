@@ -1,0 +1,15 @@
+name: POS background tick
+# Vercel Hobby only allows daily crons: this free schedule delivers the POS outbox (Fluentra sync) every 5 minutes.
+on:
+  schedule: [{ cron: "*/5 * * * *" }]
+  workflow_dispatch:
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          APP_URL: ${{ secrets.POS_APP_URL }}
+          CRON_SECRET: ${{ secrets.POS_CRON_SECRET }}
+        run: |
+          test -n "$APP_URL" && test -n "$CRON_SECRET" || { echo "POS_APP_URL / POS_CRON_SECRET not set"; exit 0; }
+          curl -fsS -X POST -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/cron/tick"
