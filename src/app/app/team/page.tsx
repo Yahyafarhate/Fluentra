@@ -18,8 +18,8 @@ export default function TeamPage() {
   const { t, fmt } = useI18n();
   const { can, me } = useApp();
   const { toast, confirm } = useFeedback();
-  const { data, error, loading, reload } = useApi<any>("/api/v1/team"); // eslint-disable-line @typescript-eslint/no-explicit-any
-  const [dlg, setDlg] = useState(false); const [edit, setEdit] = useState<any>(null); const [matrix, setMatrix] = useState(false); // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { data, error, loading, reload } = useApi<any>("/api/v1/team");  
+  const [dlg, setDlg] = useState(false); const [edit, setEdit] = useState<any>(null); const [matrix, setMatrix] = useState(false);  
   if (!can("team.manage")) return <NoAccess />;
   if (error) return <ErrorState error={error} onRetry={reload} />;
   const assignable: string[] = data?.assignableRoles ?? [];
@@ -37,7 +37,7 @@ export default function TeamPage() {
           {matrix && <Matrix data={data} />}
           <TableWrap>
             <thead><tr><Th>{t("Member")}</Th><Th>{t("Role")}</Th><Th>{t("Locations")}</Th><Th>{t("Last login")}</Th><Th /></tr></thead>
-            <tbody>{data.members.map((m: any) => ( // eslint-disable-line @typescript-eslint/no-explicit-any
+            <tbody>{data.members.map((m: any) => (  
               <tr key={m.id} className={cx(m.status === "disabled" && "opacity-60")}>
                 <Td><div className="flex items-center gap-3"><Avatar name={m.name} /><div><p className="font-medium">{m.name} {m.userId === me.user.id && <Badge>{t("you")}</Badge>}</p><p className="text-xs text-muted">{m.email}</p></div></div></Td>
                 <Td><Badge tone={m.role === "owner" ? "gold" : "neutral"}>{t(ROLE_LABEL[m.role])}</Badge>{m.status === "disabled" && <Badge tone="bad" className="ms-1">{t("Disabled")}</Badge>}</Td>
@@ -58,7 +58,7 @@ export default function TeamPage() {
   );
 }
 
-function Matrix({ data }: { data: any }) { // eslint-disable-line @typescript-eslint/no-explicit-any
+function Matrix({ data }: { data: any }) {  
   const { t } = useI18n();
   const perms = [...new Set(Object.values(data.permissions).flat())] as string[];
   const roles = Object.keys(data.permissions);
@@ -105,7 +105,7 @@ function InviteDialog({ open, onClose, roles, onDone }: { open: boolean; onClose
   );
 }
 
-function EditDialog({ member, roles, onClose, onDone }: { member: any; roles: string[]; onClose: () => void; onDone: () => void }) { // eslint-disable-line @typescript-eslint/no-explicit-any
+function EditDialog({ member, roles, onClose, onDone }: { member: any; roles: string[]; onClose: () => void; onDone: () => void }) {  
   const { t } = useI18n(); const { toast, confirm } = useFeedback();
   const [role, setRole] = useState(""); const [locs, setLocs] = useState<string[] | null>(null); const [status, setStatus] = useState("active"); const [busy, setBusy] = useState(false);
   const [seen, setSeen] = useState<string | null>(null);

@@ -21,8 +21,8 @@ export default function AnalyticsPage() {
     return { from: shiftDate(today, -(Number(preset) - 1)), to: today };
   }, [preset, today, custom]);
   const loc = scope === "one" ? locationId : undefined;
-  const { data: a, error, loading, reload } = useApi<any>(range && can("analytics.view") ? `/api/v1/analytics${qs({ ...range, locationId: loc })}` : null); // eslint-disable-line @typescript-eslint/no-explicit-any
-  const fc = useApi<any>(can("analytics.view") && hasFeature("forecasting") ? `/api/v1/analytics/forecast${qs({ locationId: loc })}` : null); // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { data: a, error, loading, reload } = useApi<any>(range && can("analytics.view") ? `/api/v1/analytics${qs({ ...range, locationId: loc })}` : null);  
+  const fc = useApi<any>(can("analytics.view") && hasFeature("forecasting") ? `/api/v1/analytics/forecast${qs({ locationId: loc })}` : null);  
   if (!can("analytics.view")) return <NoAccess />;
   const wd = (n: number) => fmt.date(new Date(Date.UTC(2024, 0, n)).toISOString().slice(0, 10), { weekday: "short" });
   const money = (n: number) => fmt.money(n);

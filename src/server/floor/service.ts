@@ -191,13 +191,13 @@ export async function getFloorState(db: Db, ctx: Ctx, locationId: string, opts: 
   const horizon = opts.horizonMin ?? 90;
   const floors = await db.query(`SELECT id, name, width, height, sort FROM floors WHERE org_id=$1 AND location_id=$2 ORDER BY sort, name`, [ctx.orgId, locationId]);
   const sections = await db.query(`SELECT id, name, kind FROM sections WHERE org_id=$1 AND location_id=$2 ORDER BY sort, name`, [ctx.orgId, locationId]);
-  const tables = await db.query<Record<string, any>>( // eslint-disable-line @typescript-eslint/no-explicit-any
+  const tables = await db.query<Record<string, any>>(  
     `SELECT id, floor_id, section_id, name, min_capacity, capacity, shape, x, y, w, h, rotation, status, blocked_reason, bookable_online, active
        FROM tables WHERE org_id=$1 AND location_id=$2 AND active ORDER BY name`, [ctx.orgId, locationId]);
   const rs = await db.query<{ tableId: string; id: string; guestName: string; partySize: number; startAt: Date; endAt: Date; startLocal: string; endLocal: string; status: string; isVip: boolean; seatedAt: Date | null; code: string; specialRequests: string | null }>(
     `SELECT rt.table_id, r.id, r.guest_name, r.party_size, r.start_at, r.end_at, to_char(r.start_at AT TIME ZONE $4,'HH24:MI') AS start_local, to_char(r.end_at AT TIME ZONE $4,'HH24:MI') AS end_local, r.status, r.is_vip, r.seated_at, r.code, r.special_requests
        FROM reservation_tables rt JOIN reservations r ON r.id=rt.reservation_id
-      WHERE rt.location_id=$1 AND r.status IN ('pending','confirmed','arrived','seated') AND upper(rt.during) > $2 AND lower(rt.during) < $3
+      WHERE rt.location_id=$1 AND r.status IN ('pending','confirmed','arrived','seated') AND ((upper(rt.during) > $2 AND lower(rt.during) < $3) OR r.status = 'seated')
       ORDER BY r.start_at`, [locationId, new Date(at.getTime() - 4 * 3600_000), new Date(at.getTime() + 24 * 3600_000), loc.timezone]);
   const combos = await db.query(`SELECT c.id, c.name, c.capacity, array_agg(ct.table_id) AS table_ids FROM table_combinations c JOIN table_combination_tables ct ON ct.combination_id=c.id WHERE c.org_id=$1 AND c.location_id=$2 AND c.active GROUP BY c.id`, [ctx.orgId, locationId]);
 

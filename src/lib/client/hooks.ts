@@ -5,7 +5,7 @@ import { api, ApiError } from "./api";
 export interface ApiState<T> { data: T | null; error: ApiError | null; loading: boolean; refreshing: boolean; reload: () => Promise<void>; setData: (d: T | null) => void }
 
 /** GET hook with cancellation, stale-while-revalidate and manual reload. Pass null to skip. */
-export function useApi<T = any>(url: string | null): ApiState<T> { // eslint-disable-line @typescript-eslint/no-explicit-any
+export function useApi<T = any>(url: string | null): ApiState<T> {  
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [loading, setLoading] = useState(!!url);
@@ -39,7 +39,7 @@ export function useApi<T = any>(url: string | null): ApiState<T> { // eslint-dis
  */
 export function useLive(locationId: string | null, onChange: () => void, pollMs = 30000) {
   const cb = useRef(onChange);
-  cb.current = onChange;
+  useEffect(() => { cb.current = onChange; });
   const [mode, setMode] = useState<"live" | "polling">("polling");
   useEffect(() => {
     let es: EventSource | null = null;

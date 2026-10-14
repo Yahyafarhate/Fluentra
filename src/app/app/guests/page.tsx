@@ -18,7 +18,7 @@ export default function GuestsPage() {
   const [f, setF] = useState({ vip: "", minVisits: "", lapsedDays: "", birthdayWithinDays: "", hasAllergies: false, neverVisited: false, sort: "name" });
   const [page, setPage] = useState(0); const [add, setAdd] = useState(false); const [show, setShow] = useState(false);
   const params = useMemo(() => ({ search: dsearch || undefined, vip: f.vip || undefined, minVisits: f.minVisits || undefined, lapsedDays: f.lapsedDays || undefined, birthdayWithinDays: f.birthdayWithinDays || undefined, hasAllergies: f.hasAllergies ? "true" : undefined, neverVisited: f.neverVisited ? "true" : undefined, sort: f.sort, limit: 50, offset: page * 50 }), [dsearch, f, page]);
-  const { data, error, loading, reload } = useApi<{ rows: any[]; total: number }>(`/api/v1/customers${qs(params)}`); // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { data, error, loading, reload } = useApi<{ rows: any[]; total: number }>(`/api/v1/customers${qs(params)}`);  
   if (!can("customers.read")) return <NoAccess />;
   const set = (k: keyof typeof f, v: string | boolean) => { setF({ ...f, [k]: v }); setPage(0); };
   return (

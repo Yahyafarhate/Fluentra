@@ -22,7 +22,9 @@ export async function request<T = unknown>(method: string, url: string, body?: u
   if (!res.ok) {
     const err = (data as { error?: { code?: string; message?: string; details?: unknown } } | null)?.error;
     if (res.status === 401 && typeof window !== "undefined" && !url.startsWith("/api/auth/") && !url.startsWith("/api/public/")) {
-      window.location.href = `/login?next=${encodeURIComponent(window.location.pathname)}`;
+      // full navigation on purpose: drops all client state after the session ends
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+      window.location.assign(`/login?next=${encodeURIComponent(window.location.pathname)}`);
     }
     throw new ApiError(res.status, err?.code ?? "ERROR", err?.message ?? `Request failed (${res.status})`, err?.details);
   }
@@ -30,11 +32,11 @@ export async function request<T = unknown>(method: string, url: string, body?: u
 }
 
 export const api = {
-  get: <T = any>(url: string, signal?: AbortSignal) => request<T>("GET", url, undefined, signal), // eslint-disable-line @typescript-eslint/no-explicit-any
-  post: <T = any>(url: string, body?: unknown) => request<T>("POST", url, body ?? {}), // eslint-disable-line @typescript-eslint/no-explicit-any
-  put: <T = any>(url: string, body?: unknown) => request<T>("PUT", url, body ?? {}), // eslint-disable-line @typescript-eslint/no-explicit-any
-  patch: <T = any>(url: string, body?: unknown) => request<T>("PATCH", url, body ?? {}), // eslint-disable-line @typescript-eslint/no-explicit-any
-  del: <T = any>(url: string) => request<T>("DELETE", url), // eslint-disable-line @typescript-eslint/no-explicit-any
+  get: <T = any>(url: string, signal?: AbortSignal) => request<T>("GET", url, undefined, signal),  
+  post: <T = any>(url: string, body?: unknown) => request<T>("POST", url, body ?? {}),  
+  put: <T = any>(url: string, body?: unknown) => request<T>("PUT", url, body ?? {}),  
+  patch: <T = any>(url: string, body?: unknown) => request<T>("PATCH", url, body ?? {}),  
+  del: <T = any>(url: string) => request<T>("DELETE", url),  
 };
 
 export const qs = (o: Record<string, string | number | boolean | null | undefined>) => {

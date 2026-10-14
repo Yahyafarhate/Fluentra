@@ -11,7 +11,7 @@ export function BookingTab() {
   const { hasFeature } = useApp();
   const { confirm } = useFeedback();
   const s = useLocationSettings();
-  const [f, setF] = useState<any>(null); // eslint-disable-line @typescript-eslint/no-explicit-any
+  const [f, setF] = useState<any>(null);  
   useEffect(() => { if (s.loc) setF({ ...s.loc, maxCoversPerSlot: s.loc.maxCoversPerSlot ?? "", durationRules: s.loc.durationRules, waitlistPriority: s.loc.waitlistPriority, policyText: s.loc.policyText ?? "" }); }, [s.loc]);
   if (!f) return <Skeleton className="h-96" />;
   const fe = s.error?.fields ?? {};

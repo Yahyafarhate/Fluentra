@@ -7,7 +7,7 @@ import { api, ApiError } from "@/lib/client/api";
 
 function Status({ token }: { token: string }) {
   const { t } = useI18n();
-  const [d, setD] = useState<any>(null); const [err, setErr] = useState<ApiError | null>(null); const [left, setLeft] = useState(false); // eslint-disable-line @typescript-eslint/no-explicit-any
+  const [d, setD] = useState<any>(null); const [err, setErr] = useState<ApiError | null>(null); const [left, setLeft] = useState(false);  
   useEffect(() => { const load = () => api.get(`/api/public/waitlist/${token}`).then(setD).catch(setErr); load(); const i = setInterval(load, 20000); return () => clearInterval(i); }, [token]);
   if (err) return <Notice tone="bad">{err.message}</Notice>;
   if (!d) return <div className="grid place-items-center py-12"><Spinner /></div>;

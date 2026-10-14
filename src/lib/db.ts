@@ -19,7 +19,7 @@ export async function closePool() {
   if (g.__flPool) { await g.__flPool.end(); g.__flPool = undefined; }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 export type Row = Record<string, any>;
 
 const camel = (s: string) => s.replace(/_([a-z0-9])/g, (_, c: string) => c.toUpperCase());

@@ -38,7 +38,7 @@ export default function AutomationsPage() {
 
 function Rules() {
   const { t, fmt } = useI18n(); const { toast, confirm } = useFeedback();
-  const { data, error, loading, reload } = useApi<any>("/api/v1/automations"); // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { data, error, loading, reload } = useApi<any>("/api/v1/automations");  
   const [open, setOpen] = useState<string | null>(null); const [dlg, setDlg] = useState(false);
   if (error) return <ErrorState error={error} onRetry={reload} />;
   async function toggle(id: string, enabled: boolean) { try { await api.patch(`/api/v1/automations/${id}`, { enabled }); toast.success(enabled ? t("Rule enabled") : t("Rule disabled")); reload(); } catch (e) { toast.error(e); } }
@@ -49,7 +49,7 @@ function Rules() {
         <Button variant="primary" icon="plus" disabled={data && !data.canCreateCustom} onClick={() => setDlg(true)}>{t("New rule")}</Button></div>
       {data && !data.canCreateCustom && <div className="mb-4"><Notice tone="gold">{t("Custom automation rules are a Pro feature. Built-in rules remain active.")}</Notice></div>}
       {loading && <Skeleton className="h-64" />}
-      <ul className="space-y-3">{data?.rules.map((r: any) => ( // eslint-disable-line @typescript-eslint/no-explicit-any
+      <ul className="space-y-3">{data?.rules.map((r: any) => (  
         <li key={r.id}><Card className="!p-4">
           <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
             <Switch checked={r.enabled} onChange={(v) => toggle(r.id, v)} />
@@ -67,7 +67,7 @@ function Rules() {
 
 function RunHistory({ ruleId }: { ruleId: string }) {
   const { t, fmt } = useI18n();
-  const { data, error } = useApi<any[]>(`/api/v1/automations/${ruleId}/runs`); // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { data, error } = useApi<any[]>(`/api/v1/automations/${ruleId}/runs`);  
   if (error) return <ErrorState error={error} />;
   if (!data) return <Skeleton className="h-24 mt-3" />;
   if (!data.length) return <p className="text-sm text-muted mt-4">{t("No executions yet.")}</p>;
@@ -109,7 +109,7 @@ function RuleDialog({ open, onClose, onDone, triggers }: { open: boolean; onClos
 function Log() {
   const { t, fmt } = useI18n();
   const [status, setStatus] = useState("");
-  const { data, error, loading, reload } = useApi<any>(`/api/v1/notifications${qs({ status: status || undefined })}`); // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { data, error, loading, reload } = useApi<any>(`/api/v1/notifications${qs({ status: status || undefined })}`);  
   if (error) return <ErrorState error={error} onRetry={reload} />;
   const c = data?.counts;
   return (

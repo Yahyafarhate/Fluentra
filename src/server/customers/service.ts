@@ -220,7 +220,7 @@ export async function getCustomerProfile(db: Db, ctx: Ctx, id: string) {
 /** Staff-facing merge of two profiles (same organization only). Fully audited and non-destructive for history. */
 export async function mergeCustomers(db: Db, ctx: Ctx, sourceId: string, targetId: string) {
   if (sourceId === targetId) throw badRequest("Cannot merge a profile into itself");
-  const rows = await db.query<Record<string, any>>( // eslint-disable-line @typescript-eslint/no-explicit-any
+  const rows = await db.query<Record<string, any>>(  
     `SELECT * FROM customers WHERE org_id=$1 AND id = ANY($2) AND merged_into IS NULL AND anonymized_at IS NULL ORDER BY id FOR UPDATE`, [ctx.orgId, [sourceId, targetId]]);
   const src = rows.find((r) => r.id === sourceId), tgt = rows.find((r) => r.id === targetId);
   if (!src || !tgt) throw notFound("Customer");

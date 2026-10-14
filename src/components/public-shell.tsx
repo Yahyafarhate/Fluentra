@@ -26,7 +26,7 @@ export function PublicShell({ r, children, narrow = false }: { r: Pick<PublicRes
             <div className="min-w-0"><h1 className="text-3xl sm:text-4xl font-semibold leading-tight">{r.name}</h1>
               <p className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-white/80">
                 {(r.address || r.city) && <a className="inline-flex items-center gap-1.5 hover:underline" target="_blank" rel="noreferrer" href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([r.name, r.address, r.city].filter(Boolean).join(", "))}`}><Icon name="pin" size={15} />{[r.address, r.city].filter(Boolean).join(", ")}</a>}
-                {r.phone && <a className="inline-flex items-center gap-1.5 hover:underline" href={`tel:${r.phone}`}><Icon name="phone" size={15} />{r.phone}</a>}</p></div>
+                {r.phone && <a className="inline-flex items-center gap-1.5 hover:underline" href={`tel:${r.phone}`}><Icon name="phone" size={15} /><bdi dir="ltr">{r.phone}</bdi></a>}</p></div>
           </div>
           {r.description && <p className="mt-5 max-w-2xl text-white/85 leading-relaxed">{r.description}</p>}
         </div>

@@ -25,7 +25,7 @@ export default function ReservationsPage() {
   const [status, setStatus] = useState<string>(""); const [source, setSource] = useState("");
   const [minParty, setMinParty] = useState(""); const [timeFrom, setTimeFrom] = useState(""); const [timeTo, setTimeTo] = useState("");
   const [showFilters, setShowFilters] = useState(false);
-  const [form, setForm] = useState(false); const [walk, setWalk] = useState(false); const [open, setOpen] = useState<string | null>(null); const [edit, setEdit] = useState<any>(null); // eslint-disable-line @typescript-eslint/no-explicit-any
+  const [form, setForm] = useState(false); const [walk, setWalk] = useState(false); const [open, setOpen] = useState<string | null>(null); const [edit, setEdit] = useState<any>(null);  
   const [month, setMonth] = useState<string | null>(null);
 
   useEffect(() => { const q0 = new URLSearchParams(window.location.search).get("q"); if (q0) { setQ(q0); setShowFilters(true); } }, []);
@@ -38,11 +38,11 @@ export default function ReservationsPage() {
     q: dq || undefined, status: status || undefined, source: source || undefined, minParty: minParty || undefined, timeFrom: timeFrom || undefined, timeTo: timeTo || undefined, limit: 300,
   }), [locationId, day, allDates, searching, base, dq, status, source, minParty, timeFrom, timeTo]);
   const ready = !!locationId && (!!day || allDates);
-  const { data, error, loading, reload } = useApi<{ reservations: any[] }>(ready && view === "list" ? `/api/v1/reservations${qs(params)}` : null); // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { data, error, loading, reload } = useApi<{ reservations: any[] }>(ready && view === "list" ? `/api/v1/reservations${qs(params)}` : null);  
   useLive(locationId, reload);
 
   // counts per status for the quick-filter chips (computed from the unfiltered-by-status day)
-  const { data: dayAll, reload: reloadAll } = useApi<{ reservations: any[] }>(ready && view === "list" && !searching && !allDates ? `/api/v1/reservations${qs({ locationId, date: day, limit: 500 })}` : null); // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { data: dayAll, reload: reloadAll } = useApi<{ reservations: any[] }>(ready && view === "list" && !searching && !allDates ? `/api/v1/reservations${qs({ locationId, date: day, limit: 500 })}` : null);  
   const counts = useMemo(() => { const c: Record<string, number> = {}; for (const r of dayAll?.reservations ?? []) c[r.status] = (c[r.status] ?? 0) + 1; return c; }, [dayAll]);
   const refresh = () => { reload(); reloadAll(); };
 

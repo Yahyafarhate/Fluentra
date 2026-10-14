@@ -15,7 +15,7 @@ export default function BillingPage() {
   const { t, fmt } = useI18n();
   const { can } = useApp();
   const { toast, confirm } = useFeedback();
-  const { data, error, reload } = useApi<any>(can("billing.manage") ? "/api/v1/billing" : null); // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { data, error, reload } = useApi<any>(can("billing.manage") ? "/api/v1/billing" : null);  
   const [busy, setBusy] = useState<string | null>(null);
   if (!can("billing.manage")) return <NoAccess />;
   if (error) return <ErrorState error={error} onRetry={reload} />;
@@ -44,7 +44,7 @@ export default function BillingPage() {
             </div>
           </Card>
           <div className="lg:col-span-2 grid sm:grid-cols-3 gap-4">
-            {data.plans.map((p: any) => ( // eslint-disable-line @typescript-eslint/no-explicit-any
+            {data.plans.map((p: any) => (  
               <Card key={p.id} className={p.id === plan.planId ? "!border-gold ring-1 ring-gold" : ""}>
                 <div className="flex items-center justify-between"><h3 className="text-xl font-semibold">{p.name}</h3>{p.id === plan.planId && <Badge tone="gold">{t("Current")}</Badge>}</div>
                 <p className="mt-2"><span className="text-2xl font-semibold tabular">{fmt.number(p.priceMadMonthly)}</span> <span className="text-sm text-muted">MAD / {t("month")}</span></p>

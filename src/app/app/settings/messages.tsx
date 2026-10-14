@@ -22,7 +22,7 @@ export function MessagesTab() {
 
 export function Integrations() {
   const { t } = useI18n(); const { can } = useApp(); const { toast } = useFeedback();
-  const { data, error } = useApi<{ integrations: any[] }>(can("integrations.manage") ? "/api/v1/integrations" : null); // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { data, error } = useApi<{ integrations: any[] }>(can("integrations.manage") ? "/api/v1/integrations" : null);  
   const [busy, setBusy] = useState<string | null>(null);
   if (!can("integrations.manage")) return null;
   if (error) return <ErrorState error={error} />;
@@ -50,7 +50,7 @@ export function Integrations() {
 
 function Templates() {
   const { t } = useI18n(); const { toast, confirm } = useFeedback();
-  const { data, error, reload } = useApi<{ templates: any[]; variables: string[] }>("/api/v1/templates"); // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { data, error, reload } = useApi<{ templates: any[]; variables: string[] }>("/api/v1/templates");  
   const [key, setKey] = useState("booking_confirmation"); const [channel, setChannel] = useState("email"); const [locale, setLocale] = useState("fr");
   const cur = useMemo(() => data?.templates.find((x) => x.key === key && x.channel === channel && x.locale === locale), [data, key, channel, locale]);
   const [subject, setSubject] = useState(""); const [body, setBody] = useState(""); const [preview, setPreview] = useState<{ subject: string | null; body: string } | null>(null); const [busy, setBusy] = useState(false);

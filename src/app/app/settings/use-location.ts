@@ -11,7 +11,7 @@ export function useLocationSettings() {
   const { locationId } = useApp();
   const { toast } = useFeedback();
   const { t } = useI18n();
-  const q = useApi<any>(locationId ? `/api/v1/locations/${locationId}` : null); // eslint-disable-line @typescript-eslint/no-explicit-any
+  const q = useApi<any>(locationId ? `/api/v1/locations/${locationId}` : null);  
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   async function patch(body: Record<string, unknown>, ok = t("Settings saved")): Promise<boolean> {

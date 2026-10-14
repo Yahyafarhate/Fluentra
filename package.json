@@ -2,7 +2,7 @@
   "name": "fluentra",
   "version": "0.1.0",
   "private": true,
-  "description": "Fluentra — multi-tenant restaurant reservation & guest management SaaS",
+  "description": "Fluentra \u2014 multi-tenant restaurant reservation & guest management SaaS",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -15,7 +15,10 @@
     "db:seed": "tsx scripts/seed.ts",
     "db:reset": "tsx scripts/reset.ts",
     "db:backup": "bash scripts/backup.sh",
-    "worker": "tsx scripts/worker.ts"
+    "worker": "tsx scripts/worker.ts",
+    "test:e2e": "node tests/e2e/journey.mjs",
+    "i18n:check": "tsx scripts/i18n-extract.ts",
+    "docs:api": "tsx scripts/gen-api-docs.ts"
   },
   "engines": {
     "node": ">=20"

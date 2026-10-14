@@ -12,11 +12,11 @@ import { SOURCE_LABEL } from "@/lib/client/format";
 
 type Action = "confirm" | "arrive" | "seat" | "complete" | "cancel" | "no_show" | "undo_arrive" | "undo_seat" | "reinstate";
 
-export function ReservationDrawer({ id, onClose, onChanged, onEdit }: { id: string | null; onClose: () => void; onChanged: () => void; onEdit: (r: any) => void }) { // eslint-disable-line @typescript-eslint/no-explicit-any
+export function ReservationDrawer({ id, onClose, onChanged, onEdit }: { id: string | null; onClose: () => void; onChanged: () => void; onEdit: (r: any) => void }) {  
   const { t, fmt } = useI18n();
   const { can, locationId } = useApp();
   const { toast, confirm } = useFeedback();
-  const { data: r, error, loading, reload } = useApi<any>(id ? `/api/v1/reservations/${id}` : null); // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { data: r, error, loading, reload } = useApi<any>(id ? `/api/v1/reservations/${id}` : null);  
   const [busy, setBusy] = useState<string | null>(null);
   const [dlg, setDlg] = useState<null | "cancel" | "complete" | "table">(null);
   const [reason, setReason] = useState(""); const [spend, setSpend] = useState("");

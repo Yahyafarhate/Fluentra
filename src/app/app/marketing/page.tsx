@@ -25,10 +25,10 @@ export default function MarketingPage() {
 
 function Campaigns() {
   const { t, fmt } = useI18n(); const { toast, confirm } = useFeedback();
-  const { data, error, loading, reload } = useApi<any[]>("/api/v1/marketing/campaigns"); // eslint-disable-line @typescript-eslint/no-explicit-any
-  const [dlg, setDlg] = useState(false); const [review, setReview] = useState<any>(null); const [results, setResults] = useState<string | null>(null); // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { data, error, loading, reload } = useApi<any[]>("/api/v1/marketing/campaigns");  
+  const [dlg, setDlg] = useState(false); const [review, setReview] = useState<any>(null); const [results, setResults] = useState<string | null>(null);  
   if (error) return <ErrorState error={error} onRetry={reload} />;
-  async function openReview(c: any) { try { setReview({ c, aud: await api.get(`/api/v1/marketing/campaigns/${c.id}/audience`), when: "" }); } catch (e) { toast.error(e); } } // eslint-disable-line @typescript-eslint/no-explicit-any
+  async function openReview(c: any) { try { setReview({ c, aud: await api.get(`/api/v1/marketing/campaigns/${c.id}/audience`), when: "" }); } catch (e) { toast.error(e); } }  
   async function launch() {
     const { c, aud, when } = review;
     if (!(await confirm({ title: when ? t("Schedule campaign?") : t("Send campaign now?"), message: t("{n} guests with consent will receive “{name}”. {note}", { n: aud.recipients, name: c.name, note: aud.providerStatus.state === "connected" ? "" : aud.providerStatus.message }), confirmLabel: when ? t("Schedule") : t("Send") }))) return;
@@ -60,7 +60,7 @@ function Campaigns() {
 
 function ResultsDialog({ id, onClose }: { id: string | null; onClose: () => void }) {
   const { t } = useI18n();
-  const { data } = useApi<any>(id ? `/api/v1/marketing/campaigns/${id}/results` : null); // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { data } = useApi<any>(id ? `/api/v1/marketing/campaigns/${id}/results` : null);  
   return (
     <Dialog open={!!id} onClose={onClose} size="lg" title={data?.campaign.name ?? t("Results")}>
       {!data ? <Skeleton className="h-48" /> : (
@@ -79,7 +79,7 @@ function ResultsDialog({ id, onClose }: { id: string | null; onClose: () => void
 
 function CampaignDialog({ open, onClose, onDone }: { open: boolean; onClose: () => void; onDone: () => void }) {
   const { t } = useI18n(); const { toast } = useFeedback(); const { me } = useApp();
-  const segs = useApi<any[]>(open ? "/api/v1/marketing/segments" : null); const offers = useApi<any[]>(open ? "/api/v1/marketing/offers" : null); // eslint-disable-line @typescript-eslint/no-explicit-any
+  const segs = useApi<any[]>(open ? "/api/v1/marketing/segments" : null); const offers = useApi<any[]>(open ? "/api/v1/marketing/offers" : null);  
   const [f, setF] = useState({ name: "", channel: "email", segmentId: "", locationId: "", offerId: "", subject: "", body: "Bonjour {{guest_name}},\n\n{{offer}}\n\nRéservez votre table : {{booking_link}}" }); const [err, setErr] = useState<ApiError | null>(null); const [busy, setBusy] = useState(false);
   useEffect(() => { if (open) setErr(null); }, [open]);
   async function go() { setBusy(true); setErr(null); try { await api.post("/api/v1/marketing/campaigns", { ...f, segmentId: f.segmentId || null, locationId: f.locationId || null, offerId: f.offerId || null, subject: f.channel === "email" ? f.subject || null : null }); toast.success(t("Draft created")); onDone(); } catch (e) { setErr(e as ApiError); } finally { setBusy(false); } }
@@ -103,7 +103,7 @@ function CampaignDialog({ open, onClose, onDone }: { open: boolean; onClose: () 
 
 function Segments() {
   const { t } = useI18n(); const { toast, confirm } = useFeedback();
-  const { data, error, loading, reload } = useApi<any[]>("/api/v1/marketing/segments"); // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { data, error, loading, reload } = useApi<any[]>("/api/v1/marketing/segments");  
   const [dlg, setDlg] = useState(false);
   if (error) return <ErrorState error={error} onRetry={reload} />;
   const summary = (c: Record<string, unknown>) => Object.entries(c).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join("/") : String(v)}`).join(" · ") || t("everyone");
@@ -151,7 +151,7 @@ function SegmentDialog({ open, onClose, onDone }: { open: boolean; onClose: () =
 
 function Offers() {
   const { t, fmt } = useI18n(); const { toast } = useFeedback();
-  const { data, error, loading, reload } = useApi<any[]>("/api/v1/marketing/offers"); // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { data, error, loading, reload } = useApi<any[]>("/api/v1/marketing/offers");  
   const [dlg, setDlg] = useState(false); const [f, setF] = useState({ name: "", code: "", description: "", kind: "returning_guest", validTo: "" }); const [err, setErr] = useState<ApiError | null>(null);
   if (error) return <ErrorState error={error} onRetry={reload} />;
   async function go() { try { await api.post("/api/v1/marketing/offers", { name: f.name, code: f.code || null, description: f.description || null, kind: f.kind, validTo: f.validTo || null }); toast.success(t("Offer created")); setDlg(false); setF({ name: "", code: "", description: "", kind: "returning_guest", validTo: "" }); reload(); } catch (e) { setErr(e as ApiError); } }
@@ -172,7 +172,7 @@ function Offers() {
 
 function Retention() {
   const { t } = useI18n();
-  const { data, error } = useApi<any>("/api/v1/marketing/retention"); // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { data, error } = useApi<any>("/api/v1/marketing/retention");  
   if (error) return <ErrorState error={error} />;
   if (!data) return <Skeleton className="h-40" />;
   return (

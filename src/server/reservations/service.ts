@@ -452,6 +452,14 @@ export async function transitionReservationTx(db: Db, orgId: string, id: string,
       }
       const tables = await tableStates(db, id);
       if (!tables.length) throw conflict("Assign a table before seating this party", "NO_TABLE");
+      // seated before the booked time: the table is physically busy from NOW, so move the occupancy window start forward.
+      // If the table has another reservation in between, the exclusion constraint refuses and the host must pick another table.
+      try {
+        await db.exec(`UPDATE reservation_tables SET during = tstzrange($2::timestamptz, upper(during), '[)') WHERE reservation_id=$1 AND lower(during) > $2::timestamptz`, [id, now]);
+      } catch (e) {
+        if ((e as { code?: string }).code === "23P01") throw conflict("This table has another reservation before this booking's time — seat the party at a different table", "TABLE_BUSY_UNTIL", { tables: tables.map((t) => t.name) });
+        throw e;
+      }
       const bad = tables.find((t) => t.status === "blocked" || t.status === "occupied" || (t.status === "cleaning" && !input.force));
       if (bad) throw conflict(`Table ${bad.name} is ${bad.status === "cleaning" ? "awaiting cleaning" : bad.status}`, bad.status === "cleaning" ? "TABLE_NOT_READY" : "TABLE_UNAVAILABLE", { table: bad.name });
       await db.exec(`UPDATE tables SET status='occupied' WHERE id = ANY($1)`, [tables.map((t) => t.id)]);

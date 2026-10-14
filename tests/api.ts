@@ -7,7 +7,7 @@ import { PASSWORD } from "./helpers";
 
 const ORIGIN = "http://localhost:3000";
 export interface CallOpts { cookie?: string; body?: unknown; origin?: string | null; headers?: Record<string, string>; ip?: string }
-export interface Res { status: number; json: any; headers: Headers; text: string } // eslint-disable-line @typescript-eslint/no-explicit-any
+export interface Res { status: number; json: any; headers: Headers; text: string }  
 
 export async function call(router: Router, method: string, path: string, o: CallOpts = {}): Promise<Res> {
   const headers: Record<string, string> = { "content-type": "application/json", ...(o.headers ?? {}) };

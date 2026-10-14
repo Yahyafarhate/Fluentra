@@ -6,7 +6,7 @@ import { useApi } from "@/lib/client/hooks";
 
 export default function AdminOverview() {
   const { t, fmt } = useI18n();
-  const { data, error, reload } = useApi<any>("/api/admin/overview"); // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { data, error, reload } = useApi<any>("/api/admin/overview");  
   if (error) return <ErrorState error={error} onRetry={reload} />;
   if (!data) return <Skeleton className="h-96" />;
   const { totals: x, health: h } = data;

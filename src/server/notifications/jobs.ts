@@ -1,7 +1,7 @@
 import { withSystem, type Db } from "@/lib/db";
 import { log } from "@/lib/logger";
 
-export type JobHandler = (payload: Record<string, any>) => Promise<void>; // eslint-disable-line @typescript-eslint/no-explicit-any
+export type JobHandler = (payload: Record<string, any>) => Promise<void>;  
 const handlers = new Map<string, JobHandler>();
 export const registerJob = (type: string, h: JobHandler) => { handlers.set(type, h); };
 

@@ -11,7 +11,7 @@ import { useApi } from "@/lib/client/hooks";
 export default function OrgDetail({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { fmt } = useI18n(); const { toast } = useFeedback();
-  const { data, error, reload } = useApi<any>(`/api/admin/organizations/${id}`); // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { data, error, reload } = useApi<any>(`/api/admin/organizations/${id}`);  
   const [plan, setPlan] = useState(""); const [days, setDays] = useState(7); const [sus, setSus] = useState(false); const [reason, setReason] = useState("");
   if (error) return <ErrorState error={error} onRetry={reload} />;
   if (!data) return <Skeleton className="h-96" />;

@@ -184,3 +184,22 @@ describe("reservation lifecycle", () => {
     expect(await f({ date: futureDate(3) })).toHaveLength(2);
   });
 });
+
+describe("seating before the booked time", () => {
+  it("moves the table's occupancy window to now and refuses when another booking is in the way", async () => {
+    const t = await createTenant({ tables: [{ name: "A", capacity: 2 }, { name: "B", capacity: 2 }] });
+    const date = futureDate(1);
+    const early = await createReservation(t.owner, booking(t, { date, time: "20:00", partySize: 2, tableIds: [t.tableIds[0]] }));
+    await transitionReservation(t.owner, early.id, { action: "seat" });
+    const win = await withOrg(t.orgId, (db) => db.one<{ lower: Date }>(`SELECT lower(during) AS lower FROM reservation_tables WHERE reservation_id=$1`, [early.id]));
+    expect(win.lower.getTime()).toBeLessThanOrEqual(Date.now());
+    // table A is now busy from now → a walk-in must take B
+    const w = await seatWalkIn(t.owner, { locationId: t.locationId, partySize: 2 });
+    expect(w.tableIds).toEqual([t.tableIds[1]]);
+    // a booking sitting between now and a later reservation on the same table blocks early seating
+    const t2 = await createTenant({ tables: [{ name: "Only", capacity: 2 }] });
+    const later = await createReservation(t2.owner, booking(t2, { date: futureDate(2), time: "20:00" }));
+    await createReservation(t2.owner, booking(t2, { date: futureDate(1), time: "12:00" }));
+    await expect(transitionReservation(t2.owner, later.id, { action: "seat" })).rejects.toMatchObject({ code: "TABLE_BUSY_UNTIL" });
+  });
+});

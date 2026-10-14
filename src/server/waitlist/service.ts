@@ -168,7 +168,7 @@ export interface WaitlistEntryRow {
 export async function listWaitlist(db: Db, ctx: Ctx, locationId: string, opts: { includeClosed?: boolean } = {}) {
   assertLocationAccess(ctx, locationId);
   const loc = await loadLocation(db, locationId);
-  const active = await db.query<Record<string, any>>( // eslint-disable-line @typescript-eslint/no-explicit-any
+  const active = await db.query<Record<string, any>>(  
     `SELECT w.*, c.vip AS customer_vip, c.allergies FROM waitlist_entries w LEFT JOIN customers c ON c.id=w.customer_id
       WHERE w.org_id=$1 AND w.location_id=$2 AND w.status IN ('waiting','notified') ORDER BY w.priority DESC, w.joined_at`, [ctx.orgId, locationId]);
   const now = Date.now();

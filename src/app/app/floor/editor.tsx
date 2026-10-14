@@ -16,7 +16,7 @@ export function Editor() {
   const { t } = useI18n();
   const { locationId } = useApp();
   const { toast, confirm } = useFeedback();
-  const { data, error, loading, reload } = useApi<any>(locationId ? `/api/v1/floor/state${qs({ locationId })}` : null); // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { data, error, loading, reload } = useApi<any>(locationId ? `/api/v1/floor/state${qs({ locationId })}` : null);  
   const [tables, setTables] = useState<FloorTable[]>([]);
   const [floorId, setFloorId] = useState<string | null>(null);
   const [sel, setSel] = useState<string[]>([]);
@@ -25,7 +25,8 @@ export function Editor() {
   const [comboDlg, setComboDlg] = useState(false); const [floorDlg, setFloorDlg] = useState<null | "new" | "edit">(null); const [sectionDlg, setSectionDlg] = useState(false);
   const canvas = useRef<HTMLDivElement>(null);
   const version = useRef(0);
-  const dirtyRef = useRef(dirty); dirtyRef.current = dirty;
+  const dirtyRef = useRef(dirty);
+  useEffect(() => { dirtyRef.current = dirty; });
 
   // sync from server only when nothing is pending locally
   useEffect(() => { if (data && dirtyRef.current.size === 0) setTables(data.tables); }, [data]);
@@ -45,7 +46,8 @@ export function Editor() {
       if (version.current === v) { setDirty(new Set()); setSaveState("saved"); } else setSaveState("dirty");
     } catch (e) { setSaveState("error"); toast.error(e); }
   }, [locationId, toast]);
-  const tablesRef = useRef(tables); tablesRef.current = tables;
+  const tablesRef = useRef(tables);
+  useEffect(() => { tablesRef.current = tables; });
   useEffect(() => {
     if (dirty.size === 0) return;
     setSaveState((s) => (s === "saving" ? s : "dirty"));
@@ -213,7 +215,7 @@ function TableInspector({ tb, sections, floors, patchLocal, onSaved, onRemove }:
   );
 }
 
-function SectionsAndCombos({ data, locationId, onChanged, onAddSection }: { data: any; locationId: string; onChanged: () => void; onAddSection: () => void }) { // eslint-disable-line @typescript-eslint/no-explicit-any
+function SectionsAndCombos({ data, locationId, onChanged, onAddSection }: { data: any; locationId: string; onChanged: () => void; onAddSection: () => void }) {  
   const { t } = useI18n(); const { toast, confirm } = useFeedback();
   const tableName = (id: string) => data?.tables.find((x: { id: string }) => x.id === id)?.name ?? "?";
   async function del(kind: "sections" | "combinations", id: string, label: string) {

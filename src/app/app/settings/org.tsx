@@ -9,7 +9,7 @@ import { useApi } from "@/lib/client/hooks";
 
 export function PrivacyTab() {
   const { t } = useI18n(); const { toast } = useFeedback();
-  const { data, error, reload } = useApi<any>("/api/v1/organization"); // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { data, error, reload } = useApi<any>("/api/v1/organization");  
   const [name, setName] = useState(""); const [months, setMonths] = useState(36); const [busy, setBusy] = useState(false); const [err, setErr] = useState<ApiError | null>(null);
   useEffect(() => { if (data) { setName(data.organization.name); setMonths(data.organization.retentionMonths); } }, [data]);
   if (error) return <ErrorState error={error} />;
@@ -42,7 +42,7 @@ export function PrivacyTab() {
 export function AuditTab() {
   const { t, fmt } = useI18n();
   const [action, setAction] = useState("");
-  const { data, error, loading } = useApi<{ entries: any[] }>(`/api/v1/audit${qs({ action: action || undefined, limit: 200 })}`); // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { data, error, loading } = useApi<{ entries: any[] }>(`/api/v1/audit${qs({ action: action || undefined, limit: 200 })}`);  
   if (error) return <ErrorState error={error} />;
   return (
     <Card pad={false}>
@@ -56,7 +56,7 @@ export function AuditTab() {
 
 export function LocationsTab() {
   const { t } = useI18n(); const { toast, confirm } = useFeedback(); const { hasFeature, me } = useApp();
-  const { data, error, reload } = useApi<any[]>("/api/v1/locations"); // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { data, error, reload } = useApi<any[]>("/api/v1/locations");  
   const [dlg, setDlg] = useState(false); const [f, setF] = useState({ name: "", city: "" }); const [err, setErr] = useState<ApiError | null>(null);
   const { can } = useApp();
   if (error) return <ErrorState error={error} />;

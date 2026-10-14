@@ -84,6 +84,7 @@ export async function seed(opts: { force?: boolean } = {}) {
 
     // ───────── Location 2: Skyline Rooftop (Marrakech) ─────────
     const sky = await createLocationWithDefaults(db, org.id, { name: "Skyline Rooftop Marrakech", city: "Marrakech", address: "Avenue Mohammed VI, Guéliz", phone: "+212524000222", locale: "en" });
+    await db.exec(`UPDATE locations SET slug='skyline-rooftop' WHERE id=$1`, [sky.id]);
     await db.exec(`UPDATE locations SET description=$2, policy_text=$3, brand_color='#2f4858', email='hello@skyline-rooftop.example', max_party_online=8, slot_interval_min=30 WHERE id=$1`, [sky.id,
       "Rooftop lounge and grill with panoramic views of the Atlas. Sunset cocktails, grilled seafood and live DJ sets on weekends.",
       "Free cancellation up to 4 hours before. Tables are held for 15 minutes after the reservation time."]);
@@ -212,7 +213,8 @@ export async function seed(opts: { force?: boolean } = {}) {
             else if (start.getTime() - now.getTime() < 15 * 60000 && chance(0.5)) status = "arrived";
             else status = chance(0.82) ? "confirmed" : "pending";
             if (d > 0 && status === "pending" && chance(0.5)) status = "confirmed";
-            const source = pick(sources);
+            let source = pick(sources);
+            if (source === "walk_in" && start.getTime() > now.getTime()) source = "phone";
             const code = shortCode(6);
             const res = await db.one<{ id: string }>(
               `INSERT INTO reservations (org_id, location_id, customer_id, code, guest_name, guest_phone, guest_email, party_size, service_date, start_at, end_at, service_id, status, source,

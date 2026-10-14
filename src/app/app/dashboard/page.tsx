@@ -20,12 +20,12 @@ export default function DashboardPage() {
   const [span, setSpan] = useState<"1" | "7" | "30">("1");
   const [scope, setScope] = useState<"one" | "all">("one");
   const [serviceId, setServiceId] = useState("");
-  const [form, setForm] = useState(false); const [walk, setWalk] = useState(false); const [open, setOpen] = useState<string | null>(null); const [edit, setEdit] = useState<any>(null); // eslint-disable-line @typescript-eslint/no-explicit-any
+  const [form, setForm] = useState(false); const [walk, setWalk] = useState(false); const [open, setOpen] = useState<string | null>(null); const [edit, setEdit] = useState<any>(null);  
 
   const day = date ?? today;
   const range = useMemo(() => (day ? { from: span === "1" ? day : shiftDate(day, -(Number(span) - 1)), to: day } : null), [day, span]);
   const url = range && (scope === "all" || locationId) ? `/api/v1/dashboard${qs({ locationId: scope === "one" ? locationId : undefined, from: range.from, to: range.to, serviceId })}` : null;
-  const { data: d, error, loading, reload, refreshing } = useApi<any>(url); // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { data: d, error, loading, reload, refreshing } = useApi<any>(url);  
   const live = useLive(locationId, reload);
 
   if (!can("dashboard.view")) return <NoAccess />;
@@ -86,7 +86,7 @@ export default function DashboardPage() {
                 <div className="p-5 pb-3"><CardHeader title={t("Upcoming reservations")} subtitle={t("Next arrivals, in time order")} action={<Link href="/app/reservations" className="text-sm text-gold-strong hover:underline">{t("View all")}</Link>} /></div>
                 {d.upcoming.length === 0 ? <EmptyState icon="calendar" title={t("Nothing coming up")}>{t("No pending or confirmed reservations for this period.")}</EmptyState> : (
                   <ul className="divide-y divide-line">
-                    {d.upcoming.map((r: any) => ( // eslint-disable-line @typescript-eslint/no-explicit-any
+                    {d.upcoming.map((r: any) => (  
                       <li key={r.id}><button className="w-full text-start px-5 py-3 flex items-center gap-4 hover:bg-canvas transition" onClick={() => setOpen(r.id)}>
                         <span className="tabular font-semibold w-14">{r.time}</span>
                         <span className="min-w-0 flex-1"><span className="font-medium truncate flex items-center gap-1.5">{r.guestName}{r.isVip && <Icon name="crown" size={14} className="text-gold" />}</span>
@@ -120,7 +120,7 @@ export default function DashboardPage() {
                 <div className="p-5 pb-3"><CardHeader title={t("VIPs & special requests")} subtitle={t("Allergies, occasions and VIP guests to prepare for")} /></div>
                 {d.vips.length === 0 ? <p className="text-sm text-muted px-5 pb-6">{t("Nothing special to prepare for.")}</p> : (
                   <ul className="divide-y divide-line">
-                    {d.vips.map((r: any) => ( // eslint-disable-line @typescript-eslint/no-explicit-any
+                    {d.vips.map((r: any) => (  
                       <li key={r.id}><button className="w-full text-start px-5 py-3 hover:bg-canvas" onClick={() => setOpen(r.id)}>
                         <div className="flex items-center justify-between gap-2"><span className="font-medium truncate">{r.guestName}</span><span className="tabular text-sm text-muted">{r.time} · {r.partySize}p</span></div>
                         <div className="flex flex-wrap gap-1.5 mt-1.5">{r.occasion && <Badge tone="gold">{r.occasion}</Badge>}{r.allergies?.map((a: string) => <Badge key={a} tone="bad">⚠ {a}</Badge>)}{r.specialRequests && <span className="text-xs text-ink-2">{r.specialRequests}</span>}</div>

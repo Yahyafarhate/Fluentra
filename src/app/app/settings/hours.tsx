@@ -12,7 +12,7 @@ export function HoursTab() {
   const { t, fmt } = useI18n();
   const { toast, confirm } = useFeedback();
   const s = useLocationSettings();
-  const [svc, setSvc] = useState<any | null | "new">(null); const [sd, setSd] = useState(false); // eslint-disable-line @typescript-eslint/no-explicit-any
+  const [svc, setSvc] = useState<any | null | "new">(null); const [sd, setSd] = useState(false);  
   const dayName = (d: number) => fmt.date(new Date(Date.UTC(2024, 0, d)).toISOString().slice(0, 10), { weekday: "short" });
   if (!s.loc) return <Skeleton className="h-64" />;
   async function del(kind: "services" | "special-days", id: string, label: string) {
@@ -24,7 +24,7 @@ export function HoursTab() {
       <Card>
         <CardHeader title={t("Service periods")} subtitle={t("Each service defines the days and hours guests can be seated. No overlaps on shared days.")} action={<Button size="sm" variant="primary" icon="plus" onClick={() => setSvc("new")}>{t("Add service")}</Button>} />
         {s.services.length === 0 ? <EmptyState icon="clock" title={t("No services")}>{t("Add a service (e.g. Lunch, Dinner) to open your booking page.")}</EmptyState> : (
-          <ul className="space-y-3">{s.services.map((x: any) => ( // eslint-disable-line @typescript-eslint/no-explicit-any
+          <ul className="space-y-3">{s.services.map((x: any) => (  
             <li key={x.id} className={cx("rounded-xl border p-3.5", x.active ? "border-line" : "border-line bg-sunken opacity-70")}>
               <div className="flex items-center gap-2"><b>{x.name}</b>{!x.active && <Badge>{t("Inactive")}</Badge>}<span className="ms-auto tabular text-sm">{x.startTime} → {x.lastSeating} <span className="text-muted">({t("last seating")})</span></span></div>
               <div className="mt-2 flex flex-wrap gap-1">{ISO.map((d) => <span key={d} className={cx("text-xs rounded-md px-1.5 py-0.5", x.days.includes(d) ? "bg-charcoal text-white" : "bg-sunken text-muted/60")}>{dayName(d)}</span>)}</div>
@@ -36,7 +36,7 @@ export function HoursTab() {
       <Card>
         <CardHeader title={t("Holidays & special days")} subtitle={t("Close the restaurant or set special hours for a date.")} action={<Button size="sm" variant="primary" icon="plus" onClick={() => setSd(true)}>{t("Add date")}</Button>} />
         {s.specialDays.length === 0 ? <p className="text-sm text-muted py-4">{t("No upcoming special days.")}</p> : (
-          <ul className="divide-y divide-line">{s.specialDays.map((d: any) => ( // eslint-disable-line @typescript-eslint/no-explicit-any
+          <ul className="divide-y divide-line">{s.specialDays.map((d: any) => (  
             <li key={d.id} className="py-2.5 flex items-center gap-3"><span className="tabular text-sm w-32">{fmt.date(d.date, { weekday: "short", day: "numeric", month: "short", year: "numeric" })}</span>{d.closed ? <Badge tone="bad">{t("Closed")}</Badge> : <Badge tone="gold">{d.startTime}–{d.lastSeating}</Badge>}<span className="text-sm text-ink-2 truncate flex-1">{d.label}</span><button className="text-bad text-sm hover:underline" onClick={() => del("special-days", d.id, d.date)}>{t("Remove")}</button></li>))}</ul>)}
       </Card>
       <ServiceDialog open={!!svc} service={svc === "new" ? null : svc} locationId={s.locationId!} dayName={dayName} onClose={() => setSvc(null)} onDone={() => { setSvc(null); s.reload(); }} />
@@ -45,7 +45,7 @@ export function HoursTab() {
   );
 }
 
-function ServiceDialog({ open, service, locationId, dayName, onClose, onDone }: { open: boolean; service: any | null; locationId: string; dayName: (d: number) => string; onClose: () => void; onDone: () => void }) { // eslint-disable-line @typescript-eslint/no-explicit-any
+function ServiceDialog({ open, service, locationId, dayName, onClose, onDone }: { open: boolean; service: any | null; locationId: string; dayName: (d: number) => string; onClose: () => void; onDone: () => void }) {  
   const { t } = useI18n(); const { toast } = useFeedback();
   const [f, setF] = useState({ name: "", days: [1, 2, 3, 4, 5, 6, 7] as number[], startTime: "12:00", lastSeating: "14:30", slotIntervalMin: "", maxCovers: "", active: true }); const [err, setErr] = useState<ApiError | null>(null); const [busy, setBusy] = useState(false);
   useEffect(() => { if (!open) return; setErr(null); setF(service ? { name: service.name, days: service.days, startTime: service.startTime, lastSeating: service.lastSeating, slotIntervalMin: service.slotIntervalMin?.toString() ?? "", maxCovers: service.maxCovers?.toString() ?? "", active: service.active } : { name: "", days: [1, 2, 3, 4, 5, 6, 7], startTime: "12:00", lastSeating: "14:30", slotIntervalMin: "", maxCovers: "", active: true }); }, [open, service]);

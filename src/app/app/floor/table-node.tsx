@@ -36,19 +36,19 @@ export function TableNode({ t, floor, mode, selected, dim, onClick, onPointerDow
       className={cx("tbl absolute border-2 flex flex-col items-center justify-center text-center leading-tight select-none overflow-hidden",
         t.shape === "round" ? "rounded-full" : "rounded-xl", live ? STATUS_STYLE[st] : "bg-surface border-line-strong text-ink",
         mode === "edit" ? "cursor-grab active:cursor-grabbing" : "cursor-pointer", selected && "ring-2 ring-gold ring-offset-2 z-10", dim && "opacity-25")}>
-      <span className="font-semibold text-[clamp(10px,1.35cqw,15px)] leading-none">{t.name}</span>
+      <span className="font-semibold text-[clamp(11px,1.5cqw,16px)] leading-none">{t.name}</span>
       {live && st === "occupied" && t.current ? (
         <>
-          <span className="text-[clamp(8px,1cqw,11px)] mt-0.5 px-1 truncate max-w-full">{t.current.guestName}</span>
-          <span className="text-[clamp(8px,1cqw,11px)] opacity-80">{t.current.partySize}p · {t.current.seatedAt ? `${Math.max(0, Math.round((Date.now() - new Date(t.current.seatedAt).getTime()) / 60000))}m` : ""}</span>
+          <span className="text-[clamp(9px,1.1cqw,12px)] mt-0.5 px-1 truncate max-w-full">{t.current.guestName}</span>
+          <span className="text-[clamp(9px,1.1cqw,12px)] opacity-80">{t.current.partySize}p · {t.current.seatedAt ? `${Math.max(0, Math.round((Date.now() - new Date(t.current.seatedAt).getTime()) / 60000))}m` : ""}</span>
         </>
       ) : live && st === "reserved" && t.next ? (
         <>
-          <span className="text-[clamp(8px,1cqw,11px)] mt-0.5 px-1 truncate max-w-full">{t.next.guestName}</span>
-          <span className="text-[clamp(8px,1cqw,11px)] opacity-80">{t.next.startLocal} · {t.next.partySize}p</span>
+          <span className="text-[clamp(9px,1.1cqw,12px)] mt-0.5 px-1 truncate max-w-full">{t.next.guestName}</span>
+          <span className="text-[clamp(9px,1.1cqw,12px)] opacity-80">{t.next.startLocal} · {t.next.partySize}p</span>
         </>
       ) : (
-        <span className="text-[clamp(8px,1cqw,11px)] opacity-70 mt-0.5">{t.capacity} {mode === "edit" || st === "available" ? "" : ""}{t.minCapacity > 1 ? `(${t.minCapacity}–${t.capacity})` : ""}</span>
+        <span className="text-[clamp(9px,1.1cqw,12px)] opacity-70 mt-0.5">{t.capacity} {mode === "edit" || st === "available" ? "" : ""}{t.minCapacity > 1 ? `(${t.minCapacity}–${t.capacity})` : ""}</span>
       )}
       {live && t.next?.isVip && <span className="absolute top-0.5 end-1 text-[9px]">♛</span>}
       {children}

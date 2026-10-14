@@ -20,13 +20,13 @@ export function Timeline() {
   const [date, setDate] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
   const day = date ?? today;
-  const { data, error, loading, reload } = useApi<any>(locationId && day ? `/api/v1/floor/timeline${qs({ locationId, date: day })}` : null); // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { data, error, loading, reload } = useApi<any>(locationId && day ? `/api/v1/floor/timeline${qs({ locationId, date: day })}` : null);  
   useLive(locationId, reload);
 
   const calc = useMemo(() => {
     if (!data) return null;
     const t0 = new Date(data.dayStart).getTime();
-    const blocks = (data.blocks as any[]).map((b) => ({ ...b, h0: (new Date(b.startAt).getTime() - t0) / 3600000, h1: (new Date(b.endAt).getTime() - t0) / 3600000 })); // eslint-disable-line @typescript-eslint/no-explicit-any
+    const blocks = (data.blocks as any[]).map((b) => ({ ...b, h0: (new Date(b.startAt).getTime() - t0) / 3600000, h1: (new Date(b.endAt).getTime() - t0) / 3600000 }));  
     const minH = Math.min(10, ...blocks.map((b) => Math.floor(b.h0))); const maxH = Math.max(24, ...blocks.map((b) => Math.ceil(b.h1)));
     const [hh, mm] = String(data.nowLabel).split(":").map(Number);
     return { blocks, startH: Math.max(0, minH), endH: Math.min(30, maxH), now: hh + mm / 60 };

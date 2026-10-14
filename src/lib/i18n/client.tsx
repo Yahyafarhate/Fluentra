@@ -20,10 +20,14 @@ export function I18nProvider({ locale, children }: { locale: Locale; children: R
       locale, dir: dirOf(locale), setLocale,
       t: (key, vars) => translate(locale, key, vars),
       fmt: {
-        // calendar dates are rendered in UTC so a plain YYYY-MM-DD never shifts with the viewer's time zone
-        date: (d, o = { weekday: "short", day: "numeric", month: "short" }) => new Intl.DateTimeFormat(loc, { timeZone: typeof d === "string" && d.length === 10 ? "UTC" : undefined, ...o }).format(typeof d === "string" ? new Date(d.length === 10 ? d + "T00:00:00Z" : d) : d),
-        number: (n, o) => new Intl.NumberFormat(loc, o).format(n),
-        money: (n, currency = "MAD") => new Intl.NumberFormat(loc, { style: "currency", currency, maximumFractionDigits: 0 }).format(n),
+        // Server (Node ICU) and browser (CLDR) can disagree on punctuation and space characters; normalizing them keeps
+        // server-rendered text identical to the client's, so hydration never mismatches.
+        // Calendar dates (YYYY-MM-DD) render in UTC so they never shift with the viewer's time zone.
+        date: (d, o = { weekday: "short", day: "numeric", month: "short" }) =>
+          new Intl.DateTimeFormat(loc, { timeZone: typeof d === "string" && d.length === 10 ? "UTC" : undefined, ...o })
+            .format(typeof d === "string" ? new Date(d.length === 10 ? d + "T00:00:00Z" : d) : d).replace(/[,،]/g, "").replace(/[\u202F\u00A0]/g, " ").replace(/\s+at\s+/g, " "),
+        number: (n, o) => new Intl.NumberFormat(loc, o).format(n).replace(/[\u202F\u00A0]/g, " "),
+        money: (n, currency = "MAD") => new Intl.NumberFormat(loc, { style: "currency", currency, maximumFractionDigits: 0 }).format(n).replace(/[\u202F\u00A0]/g, " "),
       },
     };
   }, [locale, setLocale]);

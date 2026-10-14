@@ -15,7 +15,7 @@ export default function OnboardingPage() {
   const { can, locationId, me } = useApp();
   const { toast } = useFeedback();
   const s = useLocationSettings();
-  const floor = useApi<any>(locationId ? `/api/v1/floor/state?locationId=${locationId}` : null); // eslint-disable-line @typescript-eslint/no-explicit-any
+  const floor = useApi<any>(locationId ? `/api/v1/floor/state?locationId=${locationId}` : null);  
   const [step, setStep] = useState(0);
   const [p, setP] = useState({ name: "", address: "", city: "", phone: "", description: "" });
   const [hours, setHours] = useState<Array<{ id?: string; name: string; startTime: string; lastSeating: string; days: number[]; active: boolean }>>([]);

@@ -19,9 +19,9 @@ export default function GuestPage({ params }: { params: Promise<{ id: string }> 
   const { can, me } = useApp();
   const { toast, confirm } = useFeedback();
   const router = useRouter();
-  const { data, error, loading, reload } = useApi<any>(`/api/v1/customers/${id}`); // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { data, error, loading, reload } = useApi<any>(`/api/v1/customers/${id}`);  
   const [tab, setTab] = useState<"profile" | "history" | "privacy">("profile");
-  const [f, setF] = useState<any>(null); const [err, setErr] = useState<ApiError | null>(null); const [busy, setBusy] = useState(false); // eslint-disable-line @typescript-eslint/no-explicit-any
+  const [f, setF] = useState<any>(null); const [err, setErr] = useState<ApiError | null>(null); const [busy, setBusy] = useState(false);  
   const [merge, setMerge] = useState(false);
 
   useEffect(() => {
@@ -98,7 +98,7 @@ export default function GuestPage({ params }: { params: Promise<{ id: string }> 
           <Card pad={false}>
             <div className="p-5 pb-2"><CardHeader title={t("Reservation history")} subtitle={s.cancellations ? t("{n} cancelled", { n: s.cancellations }) : undefined} /></div>
             {data.reservations.length === 0 ? <EmptyState icon="calendar" title={t("No reservations yet")} /> : (
-              <ul className="divide-y divide-line">{data.reservations.map((r: any) => ( // eslint-disable-line @typescript-eslint/no-explicit-any
+              <ul className="divide-y divide-line">{data.reservations.map((r: any) => (  
                 <li key={r.id} className="px-5 py-3 flex items-center gap-3 flex-wrap"><span className="tabular text-sm w-28">{fmt.date(r.startAt, { day: "numeric", month: "short", year: "numeric" })}</span><span className="text-sm flex-1 min-w-0 truncate">{r.locationName} · {r.partySize}p{r.occasion ? ` · ${r.occasion}` : ""}</span><StatusBadge status={r.status} /></li>))}</ul>)}
           </Card>
           <div className="space-y-6">

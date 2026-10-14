@@ -5,7 +5,7 @@ import { useApi } from "@/lib/client/hooks";
 
 export default function AdminAudit() {
   const { fmt } = useI18n();
-  const { data, error, reload } = useApi<{ entries: any[] }>("/api/admin/audit"); // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { data, error, reload } = useApi<{ entries: any[] }>("/api/admin/audit");  
   if (error) return <ErrorState error={error} onRetry={reload} />;
   if (!data) return <Skeleton className="h-96" />;
   return (

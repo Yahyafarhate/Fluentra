@@ -12,7 +12,7 @@ import { useApi, useDebounced } from "@/lib/client/hooks";
 export default function OrgsPage() {
   const { fmt } = useI18n(); const router = useRouter(); const { toast } = useFeedback();
   const [q, setQ] = useState(""); const dq = useDebounced(q);
-  const { data, error, loading, reload } = useApi<{ organizations: any[] }>(`/api/admin/organizations${qs({ q: dq || undefined })}`); // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { data, error, loading, reload } = useApi<{ organizations: any[] }>(`/api/admin/organizations${qs({ q: dq || undefined })}`);  
   const [dlg, setDlg] = useState(false); const [f, setF] = useState({ name: "", restaurantName: "", city: "", planId: "pro", trialDays: 14, ownerName: "", ownerEmail: "", ownerPassword: "" }); const [err, setErr] = useState<ApiError | null>(null); const [busy, setBusy] = useState(false);
   async function create() { setBusy(true); setErr(null); try { const r = await api.post("/api/admin/organizations", { ...f, city: f.city || undefined }); toast.success("Organization created"); setDlg(false); router.push(`/admin/organizations/${r.id}`); } catch (e) { setErr(e as ApiError); } finally { setBusy(false); } }
   const fe = err?.fields ?? {};

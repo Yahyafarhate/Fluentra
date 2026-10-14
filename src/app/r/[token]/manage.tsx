@@ -61,8 +61,8 @@ export function ManageReservation({ token, initial, justBooked }: { token: strin
               <Button variant="primary" disabled={!r.canModify} onClick={() => { setErr(null); setDate(r.date); setParty(r.partySize); setTime(r.time); setDlg("modify"); }}>{t("Change date, time or guests")}</Button>
               <Button variant="ghost" className="!text-bad" disabled={!r.canCancel} onClick={() => { setErr(null); setDlg("cancel"); }}>{t("Cancel reservation")}</Button>
             </div>
-            {(!r.canCancel || !r.canModify) && <p className="text-xs text-center text-muted">{t("Online changes close {date}. Please call the restaurant.", { date: fmt.date(r.changeDeadline, { dateStyle: "medium", timeStyle: "short" }) })}</p>}
-            {r.canCancel && <p className="text-xs text-center text-muted">{t("Free cancellation until {date}.", { date: fmt.date(r.changeDeadline, { dateStyle: "medium", timeStyle: "short" }) })}</p>}
+            {(!r.canCancel || !r.canModify) && <p className="text-xs text-center text-muted">{t("Online changes close {date}. Please call the restaurant.", { date: fmt.date(r.changeDeadline, { dateStyle: "medium", timeStyle: "short", timeZone: r.restaurant.timezone }) })}</p>}
+            {r.canCancel && <p className="text-xs text-center text-muted">{t("Free cancellation until {date}.", { date: fmt.date(r.changeDeadline, { dateStyle: "medium", timeStyle: "short", timeZone: r.restaurant.timezone }) })}</p>}
           </div>
         )}
         {r.restaurant.policy && <p className="mt-6 text-xs text-muted border-t border-line pt-4">{r.restaurant.policy}</p>}

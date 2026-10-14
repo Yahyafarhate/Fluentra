@@ -25,14 +25,14 @@ export function LiveFloor() {
   const [hl, setHl] = useState<string | null>(null);
 
   const at = useMemo(() => (offset ? new Date(Date.now() + offset * 60000).toISOString() : undefined), [offset]);
-  const { data, error, loading, reload } = useApi<any>(locationId ? `/api/v1/floor/state${qs({ locationId, at, horizonMin: offset ? 60 : 90 })}` : null); // eslint-disable-line @typescript-eslint/no-explicit-any
-  const arrivals = useApi<{ reservations: any[] }>(locationId && today ? `/api/v1/reservations${qs({ locationId, date: today, status: "pending,confirmed,arrived", limit: 60 })}` : null); // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { data, error, loading, reload } = useApi<any>(locationId ? `/api/v1/floor/state${qs({ locationId, at, horizonMin: offset ? 60 : 90 })}` : null);  
+  const arrivals = useApi<{ reservations: any[] }>(locationId && today ? `/api/v1/reservations${qs({ locationId, date: today, status: "pending,confirmed,arrived", limit: 60 })}` : null);  
   const mode = useLive(locationId, () => { reload(); arrivals.reload(); });
   const refresh = () => { reload(); arrivals.reload(); };
 
   const floors = data?.floors ?? [];
   const floor = floors.find((f: { id: string }) => f.id === floorId) ?? floors[0];
-  const tables: FloorTable[] = data?.tables ?? [];
+  const tables: FloorTable[] = useMemo(() => data?.tables ?? [], [data]);
   const onFloor = tables.filter((x) => x.floorId === floor?.id);
   const selected = tables.find((x) => x.id === sel) ?? null;
 

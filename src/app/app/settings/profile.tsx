@@ -14,20 +14,20 @@ export function ProfileTab() {
   const { hasFeature, locationId } = useApp();
   const { toast } = useFeedback();
   const s = useLocationSettings();
-  const [f, setF] = useState<any>(null); // eslint-disable-line @typescript-eslint/no-explicit-any
-  const file = useRef<HTMLInputElement>(null); const kind = useRef<"logo" | "cover" | "gallery">("logo"); const [up, setUp] = useState(false);
+  const [f, setF] = useState<any>(null);  
+  const file = useRef<HTMLInputElement>(null); const kind = useRef<"logo" | "cover" | "gallery">("logo"); const [up, setUp] = useState<string | null>(null);
   useEffect(() => { const l = s.loc; if (l) setF({ name: l.name, address: l.address ?? "", city: l.city ?? "", country: l.country, phone: l.phone ?? "", email: l.email ?? "", website: l.website ?? "", description: l.description ?? "", timezone: l.timezone, defaultLocale: l.defaultLocale, brandColor: l.brandColor, currency: l.currency }); }, [s.loc]);
   if (s.error && !s.loc) return <ErrorState error={s.error} />;
   if (!f) return <Skeleton className="h-96" />;
   const fe = s.error?.fields ?? {};
   const branded = hasFeature("custom_branding");
   async function upload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file0 = e.target.files?.[0]; if (!file0) return; setUp(true);
+    const file0 = e.target.files?.[0]; if (!file0) return; setUp(kind.current);
     try {
       const res = await fetch(`/api/v1/locations/${locationId}/upload?kind=${kind.current}`, { method: "POST", body: file0, headers: { "Content-Type": file0.type } });
       const j = await res.json(); if (!res.ok) throw new Error(j.error?.message ?? "Upload failed");
       toast.success(t("Image uploaded")); s.reload();
-    } catch (x) { toast.error((x as Error).message); } finally { setUp(false); e.target.value = ""; }
+    } catch (x) { toast.error((x as Error).message); } finally { setUp(null); e.target.value = ""; }
   }
   const pick = (k: typeof kind.current) => { kind.current = k; file.current?.click(); };
   const l = s.loc;
@@ -60,7 +60,7 @@ export function ProfileTab() {
             {(["logo", "cover"] as const).map((k) => (
               <div key={k} className="flex items-center gap-4">
                 <div className={`${k === "logo" ? "size-16 rounded-xl" : "h-16 w-28 rounded-xl"} bg-sunken border border-line grid place-items-center overflow-hidden shrink-0`}>{l?.[k === "logo" ? "logoUrl" : "coverUrl"] ? <img src={l[k === "logo" ? "logoUrl" : "coverUrl"]} alt="" className="w-full h-full object-cover" /> : <Icon name="upload" className="text-muted" />}</div>
-                <div className="flex-1"><p className="text-sm font-medium">{k === "logo" ? t("Logo") : t("Cover photo")}</p><Button size="sm" className="mt-1" disabled={!branded} loading={up && kind.current === k} onClick={() => pick(k)}>{t("Upload")}</Button></div>
+                <div className="flex-1"><p className="text-sm font-medium">{k === "logo" ? t("Logo") : t("Cover photo")}</p><Button size="sm" className="mt-1" disabled={!branded} loading={up === k} onClick={() => pick(k)}>{t("Upload")}</Button></div>
               </div>
             ))}
             <div><p className="text-sm font-medium mb-2">{t("Gallery")}</p><div className="flex flex-wrap gap-2">{(l?.gallery ?? []).map((u: string) => <img key={u} src={u} alt="" className="size-16 rounded-lg object-cover border border-line" />)}<button disabled={!branded} onClick={() => pick("gallery")} className="size-16 rounded-lg border-2 border-dashed border-line-strong grid place-items-center text-muted hover:text-ink disabled:opacity-40" aria-label={t("Add photo")}><Icon name="plus" /></button></div></div>

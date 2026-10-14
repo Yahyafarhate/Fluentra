@@ -15,10 +15,10 @@ export default function WaitlistPage() {
   const { t } = useI18n();
   const { can, locationId, location: loc } = useApp();
   const { toast, confirm } = useFeedback();
-  const { data, error, loading, reload } = useApi<any>(locationId ? `/api/v1/waitlist${qs({ locationId, includeClosed: "true" })}` : null); // eslint-disable-line @typescript-eslint/no-explicit-any
-  const pub = useApi<any>(locationId && can("settings.manage") ? `/api/v1/locations/${locationId}` : null); // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { data, error, loading, reload } = useApi<any>(locationId ? `/api/v1/waitlist${qs({ locationId, includeClosed: "true" })}` : null);  
+  const pub = useApi<any>(locationId && can("settings.manage") ? `/api/v1/locations/${locationId}` : null);  
   useLive(locationId, reload, 20000);
-  const [add, setAdd] = useState(false); const [seat, setSeat] = useState<any>(null); const [busy, setBusy] = useState<string | null>(null); // eslint-disable-line @typescript-eslint/no-explicit-any
+  const [add, setAdd] = useState(false); const [seat, setSeat] = useState<any>(null); const [busy, setBusy] = useState<string | null>(null);  
   const [, tick] = useState(0);
   useEffect(() => { const i = setInterval(() => tick((n) => n + 1), 30000); return () => clearInterval(i); }, []);
 
@@ -46,7 +46,7 @@ export default function WaitlistPage() {
       {loading && <div className="space-y-2"><Skeleton className="h-20" /><Skeleton className="h-20" /></div>}
       {data && entries.length === 0 && <Card><EmptyState icon="clock" title={t("Nobody is waiting")} action={<Button variant="primary" icon="plus" onClick={() => setAdd(true)}>{t("Add to waitlist")}</Button>}>{t("When the restaurant is full, add walk-ins here and notify them as tables free up.")}</EmptyState></Card>}
       <ul className="space-y-2.5">
-        {entries.map((e: any) => ( // eslint-disable-line @typescript-eslint/no-explicit-any
+        {entries.map((e: any) => (  
           <li key={e.id} className={cx("rounded-xl border bg-surface p-4 flex flex-wrap items-center gap-x-5 gap-y-3", e.status === "notified" ? "border-info/50 bg-info-soft/30" : "border-line")}>
             <div className="size-10 rounded-full bg-charcoal text-white grid place-items-center font-semibold shrink-0">{e.position}</div>
             <div className="min-w-0 flex-1">
