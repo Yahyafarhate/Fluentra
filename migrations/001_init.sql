@@ -378,7 +378,6 @@ CREATE TABLE reservations (
   location_id uuid NOT NULL,
   customer_id uuid,
   code text NOT NULL UNIQUE,
-  manage_token_hash text UNIQUE,
   guest_name text NOT NULL,
   guest_phone text,
   guest_email citext,
@@ -656,6 +655,7 @@ CREATE INDEX audit_org_idx ON audit_logs(org_id, created_at DESC);
 
 CREATE TABLE jobs (
   id bigserial PRIMARY KEY,
+  org_id uuid,
   type text NOT NULL,
   payload jsonb NOT NULL DEFAULT '{}',
   run_at timestamptz NOT NULL DEFAULT now(),
@@ -727,13 +727,18 @@ CREATE POLICY tenant_isolation ON users
 DO $$
 DECLARE t text;
 BEGIN
-  FOR t IN SELECT unnest(ARRAY['sessions','password_resets','jobs','rate_limits'])
+  FOR t IN SELECT unnest(ARRAY['sessions','password_resets','rate_limits'])
   LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
     EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', t);
     EXECUTE format('CREATE POLICY system_only ON %I USING (app_system()) WITH CHECK (app_system())', t);
   END LOOP;
 END $$;
+
+-- jobs: tenants may enqueue/see only their own; platform jobs (org_id NULL) are system-only
+ALTER TABLE jobs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE jobs FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON jobs USING (app_system() OR org_id = app_org()) WITH CHECK (app_system() OR org_id = app_org());
 
 -- ───────────────────────── Seed reference data: plans ─────────────────────────
 INSERT INTO plans (id, name, price_mad_monthly, max_locations, max_users, max_monthly_reservations, features, sort) VALUES
