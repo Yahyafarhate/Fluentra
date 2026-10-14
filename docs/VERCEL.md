@@ -44,3 +44,10 @@ Vercel Hobby n'autorise que des crons **quotidiens** (`vercel.json` contient un 
 - Images stockées en base (2 Mo max chacune) : correct pour logos/photos, pas pour un gros volume.
 - Les durées de fonction Hobby sont limitées ; le tick traite 50 tâches par appel.
 - Aucun paiement en ligne (voir `docs/STATUS.md`).
+
+## Sans cloner le projet : migrer via GitHub Actions
+1. GitHub → dépôt → Settings → Secrets and variables → Actions → *New repository secret* :
+   - `MIGRATION_DATABASE_URL` : URL Neon du propriétaire, hôte **direct** (sans `-pooler`), avec `?sslmode=require`.
+   - `APP_DB_PASSWORD` : mot de passe de ton choix (≥ 20 caractères, sans `/ + =`) pour le rôle `fluentra_app`. Note-le pour `DATABASE_URL`.
+2. Onglet **Actions** → *Migrate production database* → *Run workflow* → saisis `MIGRATE`.
+3. Le workflow applique les migrations et crée le rôle `fluentra_app`. Il ne charge jamais de données de démo.

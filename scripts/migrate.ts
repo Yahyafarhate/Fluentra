@@ -7,7 +7,9 @@ const dir = path.resolve(process.cwd(), "migrations");
 
 /** Applies pending SQL migrations as the schema OWNER, then (re)grants runtime privileges to the app role. */
 export async function runMigrations(opts: { url?: string; appRole?: string; appPassword?: string; log?: boolean } = {}) {
-  const url = opts.url ?? process.env.MIGRATION_DATABASE_URL ?? "postgres://fluentra:fluentra@localhost:5432/fluentra";
+  const rawUrl = opts.url ?? process.env.MIGRATION_DATABASE_URL ?? "postgres://fluentra:fluentra@localhost:5432/fluentra";
+  // `pg` does not implement channel binding (Neon URLs often carry channel_binding=require): drop it.
+  const url = rawUrl.replace(/([?&])channel_binding=[^&]*&?/, "$1").replace(/[?&]$/, "");
   const appRole = opts.appRole ?? "fluentra_app";
   const appPassword = opts.appPassword ?? process.env.APP_DB_PASSWORD ?? "fluentra_app";
   const client = new Client({ connectionString: url });
