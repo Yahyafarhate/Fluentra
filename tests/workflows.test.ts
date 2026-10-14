@@ -298,4 +298,21 @@ describe("input validation & uploads", () => {
     expect(huge.status).toBe(400);
     void call; void addMember;
   });
+
+  it("can store images in the database (serverless hosts) and serve them back", async () => {
+    process.env.STORAGE_DRIVER = "db";
+    try {
+      const t = await createTenant();
+      const cookie = await loginAs(t.ownerEmail, PASSWORD, "70.1.0.2");
+      const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from("fluentra-db-image")]);
+      const { v1 } = await import("@/server/routes/v1");
+      const up = await v1.handler(new Request(`http://localhost:3000/api/v1/locations/${t.locationId}/upload?kind=logo`, { method: "POST", headers: { cookie, origin: "http://localhost:3000", "content-type": "image/png" }, body: png }), { params: Promise.resolve({ path: ["locations", t.locationId, "upload"] }) });
+      expect(up.status).toBe(201);
+      const { url } = await up.json();
+      const { GET } = await import("@/app/api/files/[id]/route");
+      const file = await GET(new Request("http://localhost" + url), { params: Promise.resolve({ id: url.split("/").pop() }) });
+      expect(file.status).toBe(200);
+      expect(Buffer.from(await file.arrayBuffer()).equals(png)).toBe(true);
+    } finally { delete process.env.STORAGE_DRIVER; }
+  });
 });

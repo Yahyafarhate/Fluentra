@@ -10,7 +10,7 @@ types.setTypeParser(20, (v) => Number(v));
 const g = globalThis as unknown as { __flPool?: Pool };
 export function getPool(): Pool {
   if (!g.__flPool) {
-    g.__flPool = new Pool({ connectionString: env.databaseUrl, max: Number(process.env.DB_POOL_MAX ?? 20), idleTimeoutMillis: 30_000 });
+    g.__flPool = new Pool({ connectionString: env.databaseUrl, max: Number(process.env.DB_POOL_MAX ?? (process.env.VERCEL ? 3 : 20)), idleTimeoutMillis: 30_000 });
     g.__flPool.on("error", (e) => log.error("pg pool error", { error: e.message }));
   }
   return g.__flPool;

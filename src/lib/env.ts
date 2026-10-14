@@ -16,6 +16,9 @@ export const env = {
   get jobRunnerInline() { return bool(process.env.JOB_RUNNER_INLINE, false); },
   get bcryptCost() { return Number(process.env.BCRYPT_COST ?? (this.isTest ? 4 : 12)); },
   get trustProxy() { return bool(process.env.TRUST_PROXY, false); },
+  /** "db" stores images in PostgreSQL (needed on Vercel: no persistent disk); "disk" uses UPLOAD_DIR. */
+  get storageDriver(): "db" | "disk" { const v = process.env.STORAGE_DRIVER; return v === "db" || v === "disk" ? v : process.env.VERCEL ? "db" : "disk"; },
+  get serverless() { return !!process.env.VERCEL; },
   get uploadDir() { return process.env.UPLOAD_DIR ?? "./uploads"; },
   get smtp() {
     const host = process.env.SMTP_HOST;

@@ -16,6 +16,8 @@ export async function GET(req: Request) {
     const ctx = await getCtx(parseCookies(req.headers.get("cookie"))[SESSION_COOKIE]);
     if (!ctx) throw unauthorized();
     assertPermission(ctx, "dashboard.view");
+    // Serverless hosts cannot hold a LISTEN connection open: refuse so clients use polling.
+    if (env.serverless) return Response.json({ error: { code: "STREAM_UNAVAILABLE", message: "Live stream is not available on this host; polling is used." } }, { status: 503 });
     const locationId = new URL(req.url).searchParams.get("locationId");
     if (locationId && !isUuid(locationId)) throw unauthorized();
     if (locationId) assertLocationAccess(ctx, locationId);

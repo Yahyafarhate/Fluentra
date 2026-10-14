@@ -44,8 +44,9 @@ export async function saveImage(db: Db, ctx: Ctx, locationId: string, kind: "log
   if (!loc) throw notFound("Location");
   const id = randomUUID();
   const key = `${ctx.orgId}/${id}.${img.ext}`;
-  await storage.put(key, data);
-  await db.exec(`INSERT INTO uploads (id, org_id, location_id, kind, content_type, size, storage_key, created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`, [id, ctx.orgId, locationId, kind, img.type, data.length, key, ctx.user.id]);
+  const inDb = env.storageDriver === "db";
+  if (!inDb) await storage.put(key, data);
+  await db.exec(`INSERT INTO uploads (id, org_id, location_id, kind, content_type, size, storage_key, data, created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`, [id, ctx.orgId, locationId, kind, img.type, data.length, inDb ? null : key, inDb ? data : null, ctx.user.id]);
   const url = `/api/files/${id}`;
   if (kind === "logo") await db.exec(`UPDATE locations SET logo_url=$2 WHERE id=$1`, [locationId, url]);
   else if (kind === "cover") await db.exec(`UPDATE locations SET cover_url=$2 WHERE id=$1`, [locationId, url]);
@@ -56,8 +57,10 @@ export async function saveImage(db: Db, ctx: Ctx, locationId: string, kind: "log
 
 /** Public serving: only branding images of locations that are active and belong to a live organization. */
 export async function readPublicFile(id: string) {
-  const f = await withSystem((db) => db.maybe<{ storageKey: string; contentType: string }>(
-    `SELECT u.storage_key, u.content_type FROM uploads u JOIN locations l ON l.id=u.location_id AND l.status='active' JOIN organizations o ON o.id=u.org_id AND o.status <> 'cancelled' WHERE u.id=$1`, [id]));
+  const f = await withSystem((db) => db.maybe<{ storageKey: string | null; contentType: string; data: Buffer | null }>(
+    `SELECT u.storage_key, u.content_type, u.data FROM uploads u JOIN locations l ON l.id=u.location_id AND l.status='active' JOIN organizations o ON o.id=u.org_id AND o.status <> 'cancelled' WHERE u.id=$1`, [id]));
   if (!f) throw notFound("File");
+  if (f.data) return { data: f.data, contentType: f.contentType };
+  if (!f.storageKey) throw notFound("File");
   return { data: await storage.get(f.storageKey), contentType: f.contentType };
 }

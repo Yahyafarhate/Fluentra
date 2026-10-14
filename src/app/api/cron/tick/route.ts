@@ -6,8 +6,12 @@ import { runDueJobs } from "@/server/notifications/jobs";
 
 export const dynamic = "force-dynamic";
 
-/** Scheduler entry point: POST with `Authorization: Bearer $CRON_SECRET` every minute (cron, k8s CronJob, Vercel cron…). */
-export async function POST(req: Request) {
+/** Scheduler entry point: `Authorization: Bearer $CRON_SECRET`. POST for generic schedulers; GET is what Vercel Cron sends. */
+export const GET = handle;
+export const POST = handle;
+export const maxDuration = 60;
+
+async function handle(req: Request) {
   try {
     const secret = env.cronSecret;
     const given = (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "");

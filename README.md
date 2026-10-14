@@ -50,6 +50,10 @@ Public booking pages for the seeded restaurants: `/book/le-riad-atlas`, `/book/s
 | `npm run i18n:check` | Report missing FR/AR translations |
 | `npm run docs:api` | Regenerate `docs/API.md` from the route table |
 
+## Deploying
+
+Vercel + Neon: see [docs/VERCEL.md](docs/VERCEL.md). Other hosts: [docs/OPERATIONS.md](docs/OPERATIONS.md).
+
 ## Environment variables
 
 See `.env.example` (every variable is commented). Key ones: `DATABASE_URL`, `MIGRATION_DATABASE_URL`, `APP_SECRET`, `CRON_SECRET`, `SMTP_*` (real email), `DEV_SIMULATE_NOTIFICATIONS`, `JOB_RUNNER_INLINE`, `UPLOAD_DIR`. No secret is committed.
