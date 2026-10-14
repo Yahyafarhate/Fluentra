@@ -1,0 +1,56 @@
+@import "tailwindcss";
+
+@theme {
+  --color-canvas: #f7f4ee;
+  --color-surface: #ffffff;
+  --color-sunken: #f0ece3;
+  --color-ink: #1f1d1a;
+  --color-ink-2: #4b473f;
+  --color-muted: #8b857a;
+  --color-line: #e6e1d6;
+  --color-line-strong: #d3ccbd;
+  --color-charcoal: #1c1b19;
+  --color-charcoal-2: #2a2926;
+  --color-charcoal-3: #3a3834;
+  --color-gold: #a8803f;
+  --color-gold-strong: #8a6830;
+  --color-gold-soft: #f1e6cf;
+  --color-ok: #3d7a5a;
+  --color-ok-soft: #e1efe7;
+  --color-warn: #b07a1d;
+  --color-warn-soft: #f8ecd3;
+  --color-bad: #b0463c;
+  --color-bad-soft: #f6e0dc;
+  --color-info: #3c6e8f;
+  --color-info-soft: #e0ecf3;
+  --color-violet: #6b5190;
+  --color-violet-soft: #e9e3f2;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", "Helvetica Neue", Arial, "Noto Sans", "Noto Naskh Arabic", sans-serif;
+  --font-display: ui-serif, "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Noto Naskh Arabic", serif;
+  --radius-card: 14px;
+  --shadow-card: 0 1px 2px rgb(31 29 26 / 0.04), 0 4px 16px rgb(31 29 26 / 0.04);
+  --shadow-pop: 0 10px 40px rgb(31 29 26 / 0.18);
+}
+
+html { background: var(--color-canvas); color: var(--color-ink); -webkit-text-size-adjust: 100%; }
+body { font-family: var(--font-sans); font-size: 15px; line-height: 1.5; min-height: 100dvh; }
+h1, h2, h3 { font-family: var(--font-display); letter-spacing: -0.01em; }
+:where(button, a, input, select, textarea, summary):focus-visible { outline: 2px solid var(--color-gold); outline-offset: 2px; border-radius: 6px; }
+::selection { background: var(--color-gold-soft); }
+dialog { color: inherit; }
+dialog::backdrop { background: rgb(28 27 25 / 0.5); backdrop-filter: blur(2px); }
+.tabular { font-variant-numeric: tabular-nums; }
+.scroll-thin { scrollbar-width: thin; scrollbar-color: var(--color-line-strong) transparent; }
+
+@keyframes fl-fade-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@keyframes fl-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+@keyframes fl-spin { to { transform: rotate(360deg); } }
+.animate-in { animation: fl-fade-in .22s ease-out both; }
+.skeleton { background: linear-gradient(90deg, var(--color-sunken), #f7f4ee, var(--color-sunken)); background-size: 200% 100%; animation: fl-shimmer 1.4s infinite linear; border-radius: 8px; }
+@keyframes fl-shimmer { to { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .001ms !important; transition-duration: .001ms !important; } }
+
+/* Floor plan table states */
+.tbl { transition: box-shadow .15s, transform .15s, background-color .15s; }
+.tbl:hover { box-shadow: 0 4px 14px rgb(31 29 26 / 0.18); }
+@media print { .no-print { display: none !important; } }
