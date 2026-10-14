@@ -152,3 +152,61 @@ describe("notifications & integration failure handling", () => {
     expect(test.json.message).toMatch(/nothing was sent/i);
   });
 });
+
+import net from "node:net";
+
+/** Minimal in-process SMTP server so the real nodemailer-based adapter is exercised end to end. */
+function fakeSmtp(opts: { reject?: boolean } = {}): Promise<{ port: number; messages: string[]; close: () => Promise<void> }> {
+  const messages: string[] = [];
+  return new Promise((resolve) => {
+    const srv = net.createServer((sock) => {
+      let data = false; let buf = "";
+      sock.write("220 fake ESMTP\r\n");
+      sock.on("data", (chunk) => {
+        buf += chunk.toString();
+        if (data) { if (buf.includes("\r\n.\r\n")) { messages.push(buf); buf = ""; data = false; sock.write(opts.reject ? "554 mailbox unavailable\r\n" : "250 queued as FAKE1\r\n"); } return; }
+        for (const line of buf.split("\r\n").slice(0, -1)) {
+          const l = line.toUpperCase();
+          if (l.startsWith("EHLO") || l.startsWith("HELO")) sock.write("250-fake\r\n250 8BITMIME\r\n");
+          else if (l.startsWith("MAIL FROM") || l.startsWith("RCPT TO")) sock.write("250 ok\r\n");
+          else if (l === "DATA") { data = true; sock.write("354 go\r\n"); }
+          else if (l === "QUIT") { sock.write("221 bye\r\n"); sock.end(); }
+        }
+        buf = data ? "" : "";
+      });
+    }).listen(0, "127.0.0.1", () => resolve({ port: (srv.address() as net.AddressInfo).port, messages, close: () => new Promise((r) => srv.close(() => r())) }));
+  });
+}
+
+describe("real SMTP adapter against a live (fake) SMTP server", () => {
+  it("delivers the booking confirmation and marks it sent", async () => {
+    const smtp = await fakeSmtp();
+    process.env.SMTP_HOST = "127.0.0.1"; process.env.SMTP_PORT = String(smtp.port); process.env.SMTP_FROM = "Fluentra <no-reply@test.dev>";
+    try {
+      const t = await createTenant();
+      await createReservation(t.owner, booking(t, { guestName: "Nadia Smtp", guestEmail: "nadia@example.com" }));
+      await runDueJobs(50);
+      const n = (await notifs(t.orgId))[0];
+      expect(n.status).toBe("sent");
+      expect(n.provider).toBe("smtp");
+      const raw = smtp.messages.join("\n");
+      expect(raw).toMatch(/To: nadia@example\.com/i);
+      expect(raw).toMatch(/^Subject: /im);
+      expect(raw.replace(/=\r?\n/g, "")).toContain("Nadia");
+      expect(channelStatus("email").state).toBe("connected");
+    } finally { delete process.env.SMTP_HOST; delete process.env.SMTP_PORT; delete process.env.SMTP_FROM; await smtp.close(); }
+  });
+  it("records a permanent provider rejection (5xx) as failed without retrying", async () => {
+    const smtp = await fakeSmtp({ reject: true });
+    process.env.SMTP_HOST = "127.0.0.1"; process.env.SMTP_PORT = String(smtp.port);
+    try {
+      const t = await createTenant();
+      await createReservation(t.owner, booking(t, { guestEmail: "bad@example.com" }));
+      await runDueJobs(50);
+      const n = (await notifs(t.orgId))[0];
+      expect(n.status).toBe("failed");
+      expect(n.attempts).toBe(1);
+      expect(n.error).toMatch(/554|unavailable/i);
+    } finally { delete process.env.SMTP_HOST; delete process.env.SMTP_PORT; await smtp.close(); }
+  });
+});

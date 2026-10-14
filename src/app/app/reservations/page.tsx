@@ -145,7 +145,7 @@ export default function ReservationsPage() {
       <ReservationForm open={form} onClose={() => setForm(false)} onSaved={refresh} initial={edit ?? undefined} />
       <WalkInDialog open={walk} onClose={() => setWalk(false)} onDone={refresh} />
       <ReservationDrawer id={open} onClose={() => setOpen(null)} onChanged={refresh}
-        onEdit={(r) => { setEdit({ id: r.id, date: r.serviceDate, time: r.time, partySize: r.partySize, guestName: r.guestName, guestPhone: r.guestPhone, guestEmail: r.guestEmail, source: r.source, occasion: r.occasion, specialRequests: r.specialRequests, internalNotes: r.internalNotes, seatingPreference: r.seatingPreference, isVip: r.isVip, status: r.status, customerId: r.customerId }); setOpen(null); setForm(true); }} />
+        onEdit={(r) => { setEdit({ id: r.id, date: r.serviceDate, time: r.time, partySize: r.partySize, guestName: r.guestName, guestPhone: r.guestPhone, guestEmail: r.guestEmail, source: r.source, occasion: r.occasion, specialRequests: r.specialRequests, internalNotes: r.internalNotes, seatingPreference: r.seatingPreference, isVip: r.isVip, isPrivateEvent: r.isPrivateEvent, status: r.status, customerId: r.customerId }); setOpen(null); setForm(true); }} />
     </>
   );
 }

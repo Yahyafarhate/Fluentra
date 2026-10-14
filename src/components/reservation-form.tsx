@@ -12,7 +12,7 @@ import { useDebounced } from "@/lib/client/hooks";
 interface Slot { time: string; available: boolean; reason?: string; serviceName: string; tables?: string[]; durationMin: number }
 interface Initial {
   id?: string; date?: string; time?: string; partySize?: number; guestName?: string; guestPhone?: string | null; guestEmail?: string | null; source?: string; occasion?: string | null;
-  specialRequests?: string | null; internalNotes?: string | null; seatingPreference?: string | null; isVip?: boolean; status?: string; customerId?: string | null; tableId?: string | null;
+  specialRequests?: string | null; internalNotes?: string | null; seatingPreference?: string | null; isVip?: boolean; isPrivateEvent?: boolean; status?: string; customerId?: string | null; tableId?: string | null;
 }
 interface Props { open: boolean; onClose: () => void; onSaved: (r: { id: string }) => void; initial?: Initial }
 
@@ -26,7 +26,7 @@ export function ReservationForm({ open, onClose, onSaved, initial }: Props) {
   const { toast, confirm } = useFeedback();
   const editing = !!initial?.id;
 
-  const [f, setF] = useState({ date: "", time: "", partySize: 2, guestName: "", guestPhone: "", guestEmail: "", source: "phone", occasion: "", specialRequests: "", internalNotes: "", seatingPreference: "", isVip: false, status: "confirmed", tableId: "auto" });
+  const [f, setF] = useState({ date: "", time: "", partySize: 2, guestName: "", guestPhone: "", guestEmail: "", source: "phone", occasion: "", specialRequests: "", internalNotes: "", seatingPreference: "", isVip: false, isPrivateEvent: false, status: "confirmed", tableId: "auto" });
   const [customerId, setCustomerId] = useState<string | null>(null);
   const [slots, setSlots] = useState<{ closed: boolean; closedLabel: string | null; slots: Slot[] } | null>(null);
   const [slotsLoading, setSlotsLoading] = useState(false);
@@ -44,7 +44,7 @@ export function ReservationForm({ open, onClose, onSaved, initial }: Props) {
     setF({
       date: initial?.date ?? today ?? "", time: initial?.time ?? "", partySize: initial?.partySize ?? 2, guestName: initial?.guestName ?? "", guestPhone: initial?.guestPhone ?? "", guestEmail: initial?.guestEmail ?? "",
       source: initial?.source ?? "phone", occasion: initial?.occasion ?? "", specialRequests: initial?.specialRequests ?? "", internalNotes: initial?.internalNotes ?? "", seatingPreference: initial?.seatingPreference ?? "",
-      isVip: initial?.isVip ?? false, status: initial?.status === "pending" ? "pending" : "confirmed", tableId: initial?.tableId ?? "auto",
+      isVip: initial?.isVip ?? false, isPrivateEvent: initial?.isPrivateEvent ?? false, status: initial?.status === "pending" ? "pending" : "confirmed", tableId: initial?.tableId ?? "auto",
     });
   }, [open, initial, today]);
 
@@ -76,7 +76,7 @@ export function ReservationForm({ open, onClose, onSaved, initial }: Props) {
     setBusy(true); setErr(null);
     const body = {
       date: f.date, time: f.time, partySize: f.partySize, guestName: f.guestName, guestPhone: f.guestPhone || null, guestEmail: f.guestEmail || null,
-      occasion: f.occasion || null, specialRequests: f.specialRequests || null, internalNotes: f.internalNotes || null, seatingPreference: f.seatingPreference || null, isVip: f.isVip,
+      occasion: f.occasion || null, specialRequests: f.specialRequests || null, internalNotes: f.internalNotes || null, seatingPreference: f.seatingPreference || null, isVip: f.isVip, isPrivateEvent: f.isPrivateEvent,
       tableIds: f.tableId !== "auto" ? [f.tableId] : undefined, force: force || undefined,
     };
     try {
@@ -191,7 +191,10 @@ export function ReservationForm({ open, onClose, onSaved, initial }: Props) {
             <Field label={t("Seating preference")}><Input value={f.seatingPreference} onChange={(e) => set("seatingPreference", e.target.value)} placeholder={t("Terrace, quiet corner…")} /></Field>
             {!editing && <Field label={t("Status")}><Select value={f.status} onChange={(e) => set("status", e.target.value)}><option value="confirmed">{t("Confirmed")}</option><option value="pending">{t("Pending")}</option></Select></Field>}
           </div>
-          <Switch checked={f.isVip} onChange={(v) => set("isVip", v)} label={<span className="inline-flex items-center gap-1.5"><Icon name="crown" size={15} className="text-gold" />{t("VIP guest")}</span>} />
+          <div className="flex flex-wrap gap-x-8 gap-y-3">
+            <Switch checked={f.isVip} onChange={(v) => set("isVip", v)} label={<span className="inline-flex items-center gap-1.5"><Icon name="crown" size={15} className="text-gold" />{t("VIP guest")}</span>} />
+            <Switch checked={f.isPrivateEvent} onChange={(v) => set("isPrivateEvent", v)} label={t("Private event / large group")} />
+          </div>
         </div>
       </div>
       {err && !Object.keys(fe).length && <div className="mt-4"><Notice tone="bad" title={err.code === "NO_AVAILABILITY" ? t("No table available") : undefined}>{err.message}</Notice></div>}

@@ -65,7 +65,7 @@ export function Icon({ name, size = 18, className = "", ...rest }: { name: IconN
   );
 }
 
-export function Logo({ size = 28, light = false }: { size?: number; light?: boolean }) {
+export function Logo({ size = 28, light = false, compact = false }: { size?: number; light?: boolean; compact?: boolean }) {
   return (
     <span className="inline-flex items-center gap-2.5">
       <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden="true">
@@ -73,7 +73,7 @@ export function Logo({ size = 28, light = false }: { size?: number; light?: bool
         <path d="M10 22V10h10M10 16h7" stroke={light ? "#1c1b19" : "#d9b878"} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" fill="none" />
         <circle cx="22" cy="21" r="2.2" fill={light ? "#1c1b19" : "#d9b878"} />
       </svg>
-      <span className={`font-display text-[1.15rem] font-semibold tracking-tight ${light ? "text-white" : "text-ink"}`}>Fluentra</span>
+      {!compact && <span className={`font-display text-[1.15rem] font-semibold tracking-tight ${light ? "text-white" : "text-ink"}`}>Fluentra</span>}
     </span>
   );
 }

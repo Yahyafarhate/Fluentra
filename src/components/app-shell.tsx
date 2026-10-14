@@ -69,8 +69,8 @@ export function AppShell({ me, children }: { me: Me; children: ReactNode }) {
       {items.map((n) => {
         const active = pathname === n.href || pathname.startsWith(n.href + "/");
         return (
-          <Link key={n.href} href={n.href} className={cx("flex items-center gap-3 rounded-lg px-3 h-10 text-sm font-medium transition", active ? "bg-white/10 text-white" : "text-white/65 hover:text-white hover:bg-white/5", compact && "h-11")} aria-current={active ? "page" : undefined}>
-            <Icon name={n.icon} size={18} className={active ? "text-gold" : ""} />{t(n.label)}
+          <Link key={n.href} href={n.href} title={t(n.label)} className={cx("flex items-center gap-3 rounded-lg px-3 h-10 text-sm font-medium transition", !compact && "lg:justify-center xl:justify-start", active ? "bg-white/10 text-white" : "text-white/65 hover:text-white hover:bg-white/5", compact && "h-11")} aria-current={active ? "page" : undefined}>
+            <Icon name={n.icon} size={18} className={active ? "text-gold" : ""} /><span className={compact ? "" : "lg:sr-only xl:not-sr-only"}>{t(n.label)}</span>
           </Link>
         );
       })}
@@ -78,19 +78,19 @@ export function AppShell({ me, children }: { me: Me; children: ReactNode }) {
   );
 
   const user = (
-    <div className="flex items-center gap-3 p-3 rounded-xl bg-white/5">
+    <div className="flex items-center gap-3 p-3 rounded-xl bg-white/5 lg:flex-col lg:p-2 xl:flex-row xl:p-3">
       <Avatar name={me.user.name} size={34} />
-      <div className="min-w-0 flex-1"><p className="text-sm text-white truncate">{me.user.name}</p><p className="text-xs text-white/50 truncate">{t(me.role.replace("_", " ").replace(/^./, (c) => c.toUpperCase()))}</p></div>
+      <div className="min-w-0 flex-1 lg:hidden xl:block"><p className="text-sm text-white truncate">{me.user.name}</p><p className="text-xs text-white/50 truncate">{t(me.role.replace("_", " ").replace(/^./, (c) => c.toUpperCase()))}</p></div>
       <button onClick={logout} aria-label={t("Log out")} title={t("Log out")} className="text-white/60 hover:text-white p-1.5 rounded-lg hover:bg-white/10"><Icon name="logout" size={17} /></button>
     </div>
   );
 
   return (
     <Ctx.Provider value={value}>
-      <div className="min-h-dvh lg:grid lg:grid-cols-[256px_minmax(0,1fr)]">
-        <aside className="hidden lg:flex flex-col bg-charcoal px-4 py-5 sticky top-0 h-dvh no-print">
-          <Link href="/app" className="px-2 mb-6"><Logo light /></Link>
-          <div className="px-2 mb-4"><p className="text-[11px] uppercase tracking-wider text-white/40">{t("Organization")}</p><p className="text-sm text-white/90 truncate">{me.organization.name}</p></div>
+      <div className="min-h-dvh lg:grid lg:grid-cols-[72px_minmax(0,1fr)] xl:grid-cols-[256px_minmax(0,1fr)]">
+        <aside className="hidden lg:flex flex-col bg-charcoal px-3 xl:px-4 py-5 sticky top-0 h-dvh no-print">
+          <Link href="/app" className="px-2 mb-6"><span className="xl:hidden"><Logo light compact /></span><span className="hidden xl:inline"><Logo light /></span></Link>
+          <div className="px-2 mb-4 hidden xl:block"><p className="text-[11px] uppercase tracking-wider text-white/40">{t("Organization")}</p><p className="text-sm text-white/90 truncate">{me.organization.name}</p></div>
           <div className="flex-1 overflow-y-auto scroll-thin -mx-1 px-1">{navList()}</div>
           <div className="mt-4">{user}</div>
         </aside>

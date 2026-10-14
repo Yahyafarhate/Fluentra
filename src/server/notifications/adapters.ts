@@ -16,6 +16,7 @@ export interface MessageAdapter {
 }
 
 let transport: Transporter | null = null;
+let transportKey = "";
 export const smtpAdapter: MessageAdapter = {
   channel: "email",
   provider: "smtp",
@@ -24,6 +25,8 @@ export const smtpAdapter: MessageAdapter = {
     const cfg = env.smtp;
     if (!cfg) return { ok: false, error: "SMTP is not configured", retryable: false };
     try {
+      const key = `${cfg.host}:${cfg.port}:${cfg.user ?? ""}`;
+      if (transportKey !== key) { transport = null; transportKey = key; }
       transport ??= nodemailer.createTransport({
         host: cfg.host, port: cfg.port, secure: cfg.port === 465,
         auth: cfg.user ? { user: cfg.user, pass: cfg.pass } : undefined,
@@ -33,9 +36,10 @@ export const smtpAdapter: MessageAdapter = {
       return { ok: true, providerMessageId: info.messageId };
     } catch (e) {
       transport = null;
-      const err = e as { responseCode?: number; message: string };
+      const err = e as { responseCode?: number; response?: string; message: string };
       // 5xx = permanent rejection (bad mailbox); everything else (network, 4xx) is retryable
-      return { ok: false, error: err.message.slice(0, 300), retryable: !(err.responseCode && err.responseCode >= 500) };
+      const code = err.responseCode ?? Number(/^(\d{3})\b/.exec(err.response ?? "")?.[1] ?? /\b(5\d\d)\b/.exec(err.message)?.[1] ?? 0);
+      return { ok: false, error: err.message.slice(0, 300), retryable: !(code >= 500 && code < 600) };
     }
   },
 };

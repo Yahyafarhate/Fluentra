@@ -33,5 +33,5 @@ export const DYNAMIC_KEYS = [
   "An ESTIMATE: average of the same weekday over the last 8 weeks, never below what is already booked.",
   "immediately", "day(s)", "hour(s)", "min", "on the day", "at the time",
   "No spend has been recorded for this period. Revenue is only shown from spend entered per visit (or a connected POS).",
-  "Permission", "Marketing consent", "Locations", "Organization", "Location",
+  "Permission", "Marketing consent", "Private event / large group", "Locations", "Organization", "Location",
 ] as const;
