@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { withOrg, withSystem, notifyChange, type Db } from "@/lib/db";
+import { withOrg, withSystem, notifyChange, type Db, type Row } from "@/lib/db";
 import type { Ctx } from "@/lib/auth";
 import { assertLocationAccess } from "@/lib/auth";
 import { audit } from "@/lib/audit";
@@ -246,7 +246,7 @@ export async function listReservations(db: Db, ctx: Ctx, f: z.infer<typeof listF
   return rows;
 }
 
-export async function getReservation(db: Db, ctx: Ctx, id: string) {
+export async function getReservation(db: Db, ctx: Ctx, id: string): Promise<Row> {
   const r = await db.maybe(
     `SELECT r.*, l.name AS location_name, l.timezone, l.cleaning_workflow, l.no_show_grace_min FROM reservations r JOIN locations l ON l.id=r.location_id
       WHERE r.id=$1 AND r.org_id=$2 AND ($3::uuid[] IS NULL OR r.location_id = ANY($3))`, [id, ctx.orgId, ctx.locationIds]);

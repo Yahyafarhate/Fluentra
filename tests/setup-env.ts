@@ -1,4 +1,3 @@
-process.env.NODE_ENV = "test";
 process.env.DATABASE_URL = process.env.TEST_DATABASE_URL ?? "postgres://fluentra_app:fluentra_app@localhost:5432/fluentra_test";
 process.env.BCRYPT_COST = "4";
 process.env.DEV_SIMULATE_NOTIFICATIONS = "true";

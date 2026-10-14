@@ -71,7 +71,7 @@ describe("tenant isolation (database + service layer)", () => {
     await createReservation(a.owner, booking(a, { date, guestName: "Alice A" }));
     await createReservation(b.owner, booking(b, { date, guestName: "Bob B" }));
     const listA = await withOrg(a.orgId, (db) => listReservations(db, a.owner, { date, limit: 100, offset: 0 } as never));
-    expect(listA.map((r: { guestName: string }) => r.guestName)).toEqual(["Alice A"]);
+    expect(listA.map((r) => r.guestName)).toEqual(["Alice A"]);
     const cust = await withOrg(a.orgId, (db) => queryCustomers(db, a.orgId, {}));
     expect(cust.rows.map((c) => c.name)).toEqual(["Alice A"]);
     const dash = await withOrg(a.orgId, (db) => getDashboard(db, a.owner, { date }));
