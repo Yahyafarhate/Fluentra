@@ -10,3 +10,5 @@ coverage
 backups
 uploads
 .DS_Store
+AGENTS.md
+e2e-failure-*.png

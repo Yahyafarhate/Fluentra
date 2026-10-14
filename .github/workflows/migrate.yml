@@ -1,0 +1,25 @@
+name: Migrate production database
+# Manual only. Applies pending SQL migrations to the database in the MIGRATION_DATABASE_URL secret
+# and (re)creates the non-superuser runtime role `fluentra_app`. Never seeds demo data.
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type MIGRATE to confirm'
+        required: true
+jobs:
+  migrate:
+    if: ${{ github.event.inputs.confirm == 'MIGRATE' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - name: Run migrations
+        env:
+          MIGRATION_DATABASE_URL: ${{ secrets.MIGRATION_DATABASE_URL }}
+          APP_DB_PASSWORD: ${{ secrets.APP_DB_PASSWORD }}
+        run: |
+          test -n "$MIGRATION_DATABASE_URL" && test -n "$APP_DB_PASSWORD" || { echo "Missing secrets MIGRATION_DATABASE_URL / APP_DB_PASSWORD"; exit 1; }
+          npm run db:migrate

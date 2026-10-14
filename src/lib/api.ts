@@ -44,7 +44,6 @@ export function errorResponse(e: unknown): Response {
 /** CSRF defense for cookie-authenticated mutations: Origin (or Referer) must match this app / the request host. */
 function assertSameOrigin(req: Request) {
   if (["GET", "HEAD", "OPTIONS"].includes(req.method)) return;
-  if (env.isTest && !req.headers.get("origin")) return;
   const origin = req.headers.get("origin") ?? (req.headers.get("referer") ? new URL(req.headers.get("referer")!).origin : null);
   if (!origin) throw forbidden("Missing Origin header", "CSRF");
   const host = req.headers.get("host");

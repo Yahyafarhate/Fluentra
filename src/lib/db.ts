@@ -10,7 +10,7 @@ types.setTypeParser(20, (v) => Number(v));
 const g = globalThis as unknown as { __flPool?: Pool };
 export function getPool(): Pool {
   if (!g.__flPool) {
-    g.__flPool = new Pool({ connectionString: env.databaseUrl, max: Number(process.env.DB_POOL_MAX ?? 20), idleTimeoutMillis: 30_000 });
+    g.__flPool = new Pool({ connectionString: env.databaseUrl, max: Number(process.env.DB_POOL_MAX ?? (process.env.VERCEL ? 3 : 20)), idleTimeoutMillis: 30_000 });
     g.__flPool.on("error", (e) => log.error("pg pool error", { error: e.message }));
   }
   return g.__flPool;
@@ -19,7 +19,7 @@ export async function closePool() {
   if (g.__flPool) { await g.__flPool.end(); g.__flPool = undefined; }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 export type Row = Record<string, any>;
 
 const camel = (s: string) => s.replace(/_([a-z0-9])/g, (_, c: string) => c.toUpperCase());

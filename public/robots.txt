@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /book/
+Disallow: /app
+Disallow: /admin
+Disallow: /api
+Disallow: /r/
+Disallow: /w/
+Disallow: /u/
+Disallow: /feedback/
