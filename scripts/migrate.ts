@@ -36,7 +36,11 @@ export async function runMigrations(opts: { url?: string; appRole?: string; appP
     const exists = (await client.query("SELECT 1 FROM pg_roles WHERE rolname=$1", [appRole])).rowCount;
     const pw = appPassword.replace(/'/g, "''");
     if (!exists) await client.query(`CREATE ROLE ${appRole} LOGIN PASSWORD '${pw}' NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS`);
-    else await client.query(`ALTER ROLE ${appRole} PASSWORD '${pw}' NOSUPERUSER NOBYPASSRLS`);
+    // Only the password is changed: managed hosts (e.g. Neon) forbid non-superusers from touching role attributes.
+    else await client.query(`ALTER ROLE ${appRole} PASSWORD '${pw}'`);
+    // Safety net: RLS only protects tenants if the runtime role cannot bypass it.
+    const attrs = (await client.query("SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname=$1", [appRole])).rows[0];
+    if (attrs.rolsuper || attrs.rolbypassrls) throw new Error(`Role ${appRole} is a superuser or has BYPASSRLS, which would disable tenant isolation. Drop it and re-run the migration.`);
     const db = (await client.query("SELECT current_database() AS d")).rows[0].d;
     await client.query(`GRANT CONNECT ON DATABASE "${db}" TO ${appRole}`);
     await client.query(`GRANT USAGE ON SCHEMA public TO ${appRole}`);
