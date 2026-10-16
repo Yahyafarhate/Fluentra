@@ -1,5 +1,6 @@
 "use client";
-import { forwardRef, useEffect, useId, useRef, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from "react";
+import { createPortal } from "react-dom";
+import { forwardRef, useEffect, useId, useRef, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from "react";
 import { Icon, type IconName } from "../icons";
 import { useT } from "@/lib/i18n/client";
 
@@ -140,30 +141,69 @@ export function Tabs<T extends string>({ value, onChange, tabs }: { value: T; on
 }
 
 /* ───────── Dialogs ───────── */
+/** Open dialogs, top-most last: only the top one reacts to Escape / Tab (a confirm can open over an edit dialog). */
+const dialogStack: string[] = [];
+const FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
+
+/**
+ * Modal dialog rendered in a portal as a plain fixed overlay. (A native <dialog>.showModal() was dropped: on iOS Safari it
+ * could open off-screen / invisible behind its backdrop.) Escape and backdrop click close it; focus is trapped and restored;
+ * the page behind does not scroll.
+ */
 export function Dialog({ open, onClose, title, children, footer, size = "md", side = false, description }: {
   open: boolean; onClose: () => void; title: ReactNode; children: ReactNode; footer?: ReactNode; size?: "sm" | "md" | "lg" | "xl"; side?: boolean; description?: ReactNode;
 }) {
-  const ref = useRef<HTMLDialogElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
+  const close = useRef(onClose);
+  useEffect(() => { close.current = onClose; });
+  const id = useId();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
   useEffect(() => {
-    const d = ref.current; if (!d) return;
-    if (open && !d.open) d.showModal();
-    if (!open && d.open) d.close();
-  }, [open]);
+    if (!open) return;
+    const previous = document.activeElement as HTMLElement | null;
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    dialogStack.push(id);
+    const first = panel.current?.querySelector<HTMLElement>("input,select,textarea");
+    (first ?? panel.current)?.focus({ preventScroll: true });
+    const onKey = (e: KeyboardEvent) => {
+      if (dialogStack[dialogStack.length - 1] !== id) return;
+      if (e.key === "Escape") { e.preventDefault(); close.current(); return; }
+      if (e.key !== "Tab" || !panel.current) return;
+      const items = [...panel.current.querySelectorAll<HTMLElement>(FOCUSABLE)];
+      if (!items.length) { e.preventDefault(); return; }
+      const f = items[0], l = items[items.length - 1], a = document.activeElement;
+      if (e.shiftKey && (a === f || a === panel.current)) { e.preventDefault(); l.focus(); }
+      else if (!e.shiftKey && a === l) { e.preventDefault(); f.focus(); }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      const i = dialogStack.indexOf(id); if (i >= 0) dialogStack.splice(i, 1);
+      document.body.style.overflow = overflow;
+      previous?.focus?.({ preventScroll: true });
+    };
+  }, [open, id]);
+
+  if (!open || !mounted) return null;
   const w = { sm: "max-w-sm", md: "max-w-lg", lg: "max-w-2xl", xl: "max-w-4xl" }[size];
-  return (
-    <dialog ref={ref} onClose={onClose} onCancel={(e) => { e.preventDefault(); onClose(); }} onClick={(e) => { if (e.target === ref.current) onClose(); }}
-      className={cx("m-auto bg-surface p-0 text-ink shadow-[var(--shadow-pop)] backdrop:bg-black/50", side ? "ms-auto me-0 h-dvh max-h-dvh w-full max-w-xl rounded-none" : cx("w-[calc(100%-1.5rem)] rounded-2xl max-h-[calc(100dvh-2rem)]", w))}>
-      {open && (
-        <div className="flex max-h-[inherit] h-full flex-col animate-in">
-          <div className="flex items-start justify-between gap-4 px-6 pt-5 pb-3">
-            <div className="min-w-0"><h2 className="text-xl font-semibold">{title}</h2>{description && <p className="text-sm text-muted mt-0.5">{description}</p>}</div>
-            <IconButton icon="x" label="Close" onClick={onClose} />
-          </div>
-          <div className="px-6 pb-4 overflow-y-auto scroll-thin flex-1">{children}</div>
-          {footer && <div className="flex flex-wrap items-center justify-end gap-2 px-6 py-4 border-t border-line bg-canvas/60">{footer}</div>}
+  return createPortal(
+    <div className="fixed inset-0 z-[90] flex">
+      <div className="absolute inset-0 bg-black/50" onClick={() => close.current()} aria-hidden="true" />
+      <div ref={panel} role="dialog" aria-modal="true" aria-labelledby={`${id}-t`} tabIndex={-1}
+        className={cx("relative bg-surface text-ink shadow-[var(--shadow-pop)] outline-none flex flex-col animate-in",
+          side ? "ms-auto me-0 h-dvh w-full max-w-xl" : cx("m-auto w-[calc(100%-1.5rem)] rounded-2xl max-h-[calc(100dvh-2rem)]", w))}>
+        <div className="flex items-start justify-between gap-4 px-6 pt-5 pb-3 shrink-0">
+          <div className="min-w-0"><h2 id={`${id}-t`} className="text-xl font-semibold">{title}</h2>{description && <p className="text-sm text-muted mt-0.5">{description}</p>}</div>
+          <IconButton icon="x" label="Close" onClick={() => close.current()} />
         </div>
-      )}
-    </dialog>
+        <div className="px-6 pb-4 overflow-y-auto scroll-thin flex-1 min-h-0">{children}</div>
+        {footer && <div className="flex flex-wrap items-center justify-end gap-2 px-6 py-4 border-t border-line bg-canvas/60 shrink-0 rounded-b-2xl">{footer}</div>}
+      </div>
+    </div>,
+    document.body,
   );
 }
 
