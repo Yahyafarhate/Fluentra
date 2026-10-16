@@ -6,7 +6,7 @@
 - Multi-tenancy with forced RLS, composite FKs, tenant-isolation tests; RBAC for 7 roles (matrix tested)
 - Auth: signup, login, lockout, reset, invites, DB rate limiting, CSRF origin check
 - Availability engine and transactional booking with advisory lock + GiST exclusion; concurrency tests
-- Reservation lifecycle, walk-ins, early seating, table conflicts, audit log
+- Reservation lifecycle, walk-ins, early seating, moving a seated party to another table (old table → awaiting cleaning), table conflicts, audit log
 - Floor plan editor, live floor, timeline, sections, table combinations
 - Waitlist with public join/status pages and promotion to reservation
 - CRM: profiles, tags, notes, consent ledger, search, merge, GDPR-style export/erase

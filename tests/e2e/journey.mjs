@@ -98,6 +98,22 @@ try {
   assert.equal(seated.displayStatus, "occupied");
   step(`guest checked in and seated at table ${seated.name} (occupied)`);
 
+  // 3b ── the party asks to change table: move it; the old table goes to cleaning, the new one is occupied
+  await dlg.getByRole("button", { name: /^move$/i }).click();
+  const pickDlg = sp.locator("[role=dialog]").last();
+  await pickDlg.getByText(/Move to another table/i).waitFor();
+  const choice = await pickDlg.locator("select option").evaluateAll((o) => o.map((x) => ({ v: x.value, t: x.textContent })).filter((x) => x.v));
+  assert.ok(choice.length > 0, "a free table is offered");
+  await pickDlg.locator("select").selectOption(choice[0].v);
+  await pickDlg.getByRole("button", { name: /Move guests/i }).click();
+  await sp.getByText(/Guests moved/i).first().waitFor();
+  floor = await (await sp.request.get(`${BASE}/api/v1/floor/state?locationId=${locId}`)).json();
+  assert.equal(floor.tables.find((t) => t.id === seated.id).displayStatus, "cleaning");
+  const movedTo = floor.tables.find((t) => t.current?.guestName === NAME);
+  assert.ok(movedTo && movedTo.id === choice[0].v && movedTo.displayStatus === "occupied");
+  seated.id = movedTo.id; seated.name = movedTo.name;
+  step(`party moved ${choice[0].t?.split(" ·")[0]} → table; old table awaiting cleaning, new one occupied`);
+
   await dlg.getByRole("button", { name: /Complete visit/i }).click();
   await sp.locator("[role=dialog]").last().getByLabel(/Total spend/i).fill("480");
   await sp.locator("[role=dialog]").last().getByRole("button", { name: /Complete & release table/i }).click();
