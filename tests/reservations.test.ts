@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { withOrg, withSystem } from "@/lib/db";
 import { createTenant, booking, futureDate } from "./helpers";
-import { createReservation, transitionReservation, updateReservation, listReservations, getReservation, seatWalkIn } from "@/server/reservations/service";
+import { createReservation, transitionReservation, updateReservation, listMoveTargets, listReservations, getReservation, seatWalkIn } from "@/server/reservations/service";
 import { computeSlots } from "@/server/availability/service";
 import { loadLocation } from "@/server/availability/service";
 
@@ -272,5 +272,49 @@ describe("moving a seated party to another table", () => {
     expect(await status(t.orgId, loser)).toBe("occupied");                                     // the other party never moved
     const n = await withOrg(t.orgId, (db) => db.one<{ n: number }>(`SELECT count(*)::int AS n FROM reservation_tables WHERE table_id=$1`, [C]));
     expect(n.n).toBe(1);
+  });
+});
+
+describe("changing the table of a seated party through the edit form", () => {
+  const status = (orgId: string, id: string) => withOrg(orgId, (db) => db.one<{ status: string }>(`SELECT status FROM tables WHERE id=$1`, [id])).then((r) => r.status);
+
+  it("behaves exactly like a move: old table awaiting cleaning, new table occupied, visit updated", async () => {
+    const t = await createTenant({ tables: [{ name: "A", capacity: 2 }, { name: "B", capacity: 2 }] });
+    const [A, B] = t.tableIds;
+    const r = await createReservation(t.owner, booking(t, { date: futureDate(1), time: "20:00", partySize: 2, tableIds: [A] }));
+    await transitionReservation(t.owner, r.id, { action: "seat" });
+    await updateReservation(t.owner, r.id, { tableIds: [A] });          // unchanged table: no-op
+    expect(await status(t.orgId, A)).toBe("occupied");
+    await updateReservation(t.owner, r.id, { tableIds: [B] });
+    expect(await status(t.orgId, A)).toBe("cleaning");
+    expect(await status(t.orgId, B)).toBe("occupied");
+    const visit = await withOrg(t.orgId, (db) => db.one<{ tableIds: string[] }>(`SELECT table_ids FROM visits WHERE reservation_id=$1`, [r.id]));
+    expect(visit.tableIds).toEqual([B]);
+  });
+
+  it("lists only tables that are really free for the move", async () => {
+    const t = await createTenant({ tables: [{ name: "A", capacity: 2 }, { name: "B", capacity: 2 }, { name: "C", capacity: 2 }, { name: "D", capacity: 2 }, { name: "E", capacity: 1 }] });
+    const [A, B, C, D, E] = t.tableIds;
+    const r = await createReservation(t.owner, booking(t, { date: futureDate(1), time: "20:00", partySize: 2, tableIds: [A] }));
+    await transitionReservation(t.owner, r.id, { action: "seat" });
+    const { setTableStatus } = await import("@/server/floor/service");
+    await withOrg(t.orgId, (db) => setTableStatus(db, t.owner, C, { status: "cleaning" }));
+    await withOrg(t.orgId, (db) => setTableStatus(db, t.owner, D, { status: "blocked", reason: "x" }));
+    const ids = (await listMoveTargets(t.owner, r.id)).map((x) => x.id);
+    expect(ids).toEqual([B]);                       // not the current table, not cleaning/blocked, not too small
+    expect(ids).not.toContain(E);
+    await expect(listMoveTargets(t.owner, (await createReservation(t.owner, booking(t, { date: futureDate(2), time: "20:00", partySize: 2 }))).id)).rejects.toMatchObject({ code: "INVALID_STATE" });
+  });
+
+  it("lets staff reset an occupied table that has nobody seated on it, but never one with a seated party", async () => {
+    const t = await createTenant({ tables: [{ name: "A", capacity: 2 }, { name: "B", capacity: 2 }] });
+    const [A, B] = t.tableIds;
+    const { setTableStatus } = await import("@/server/floor/service");
+    const r = await createReservation(t.owner, booking(t, { date: futureDate(1), time: "20:00", partySize: 2, tableIds: [A] }));
+    await transitionReservation(t.owner, r.id, { action: "seat" });
+    await expect(withOrg(t.orgId, (db) => setTableStatus(db, t.owner, A, { status: "available" }))).rejects.toMatchObject({ code: "TABLE_OCCUPIED" });
+    await withSystem((db) => db.exec(`UPDATE tables SET status='occupied' WHERE id=$1`, [B]));   // stale leftover
+    await withOrg(t.orgId, (db) => setTableStatus(db, t.owner, B, { status: "available" }));
+    expect(await status(t.orgId, B)).toBe("available");
   });
 });

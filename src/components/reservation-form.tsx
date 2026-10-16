@@ -77,7 +77,7 @@ export function ReservationForm({ open, onClose, onSaved, initial }: Props) {
     const body = {
       date: f.date, time: f.time, partySize: f.partySize, guestName: f.guestName, guestPhone: f.guestPhone || null, guestEmail: f.guestEmail || null,
       occasion: f.occasion || null, specialRequests: f.specialRequests || null, internalNotes: f.internalNotes || null, seatingPreference: f.seatingPreference || null, isVip: f.isVip, isPrivateEvent: f.isPrivateEvent,
-      tableIds: f.tableId !== "auto" ? [f.tableId] : undefined, force: force || undefined,
+      tableIds: f.tableId !== "auto" && initial?.status !== "seated" ? [f.tableId] : undefined, force: force || undefined,
     };
     try {
       let r: { id: string };
@@ -148,12 +148,14 @@ export function ReservationForm({ open, onClose, onSaved, initial }: Props) {
             {fe.time && <p className="text-xs text-bad mt-1">{fe.time}</p>}
             <div className="mt-3"><Switch checked={force} onChange={setForce} label={t("Override booking limits")} description={t("Allow times outside service hours or over cover limits. Tables can never be double-booked.")} /></div>
           </div>
-          <Field label={t("Table")} hint={t("Auto-assign picks the best-fitting free table.")}>
+          {initial?.status === "seated"
+            ? <Field label={t("Table")} hint={t("This party is seated. To change its table, use “Move” on the reservation.")}><Input value={tables.find((x) => x.id === initial?.tableId)?.name ?? ""} disabled readOnly /></Field>
+            : <Field label={t("Table")} hint={t("Auto-assign picks the best-fitting free table.")}>
             <Select value={f.tableId} onChange={(e) => set("tableId", e.target.value)}>
               <option value="auto">{t("Auto-assign")}{chosen?.tables?.length ? ` (${chosen.tables.join(" + ")})` : ""}</option>
               {tables.filter((x) => x.capacity >= f.partySize).map((x) => <option key={x.id} value={x.id}>{x.name} · {x.capacity}</option>)}
             </Select>
-          </Field>
+          </Field>}
         </div>
 
         <div className="space-y-4">

@@ -10,7 +10,7 @@ import { utcToLocal } from "@/lib/tz";
 import { rateLimit } from "@/lib/ratelimit";
 import type { Permission } from "@/lib/rbac";
 
-import { bookingInputSchema, calendarCounts, createReservation, getReservation, listFilterSchema, listReservations, seatWalkIn, transitionReservation, transitionSchema, updateReservation, updateSchema, walkInSchema } from "../reservations/service";
+import { bookingInputSchema, calendarCounts, createReservation, getReservation, listFilterSchema, listMoveTargets, listReservations, seatWalkIn, transitionReservation, transitionSchema, updateReservation, updateSchema, walkInSchema } from "../reservations/service";
 import { computeSlots, loadLocation } from "../availability/service";
 import {
   comboSchema, createCombination, createFloor, createSection, createTable, deleteCombination, deleteFloor, deleteSection, deleteTable, floorSchema, getFloorState, getTimeline,
@@ -136,6 +136,8 @@ def("PATCH", "/reservations/:id", "reservations.write", "Edit / reschedule / rea
   const input = await a.body(updateSchema);
   return updateReservation(a.ctx, a.params.id, input);
 });
+def("GET", "/reservations/:id/move-targets", "reservations.operate", "Tables a seated party can move to right now", async (a) =>
+  ({ tables: await listMoveTargets(a.ctx, a.params.id) }));
 def("POST", "/reservations/:id/transition", "reservations.operate", "Status action: confirm, arrive, seat, complete, cancel, no_show, undo_*", async (a) => {
   const input = await a.body(transitionSchema);
   return transitionReservation(a.ctx, a.params.id, input);

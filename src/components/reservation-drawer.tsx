@@ -47,6 +47,11 @@ export function ReservationDrawer({ id, onClose, onChanged, onEdit }: { id: stri
   async function openTables() {
     if (!r || !locationId) return;
     try {
+      if (r.status === "seated") {
+        const mv = await api.get(`/api/v1/reservations/${id}/move-targets`);
+        setFreeTables(mv.tables.map((x: { id: string; name: string; capacity: number }) => ({ ...x, displayStatus: "available" })));
+        setPick(""); setDlg("table"); return;
+      }
       const st = await api.get(`/api/v1/floor/state?locationId=${r.locationId}`);
       setFreeTables(st.tables.filter((x: { capacity: number; displayStatus: string }) => x.capacity >= r.partySize && (x.displayStatus === "available" || x.displayStatus === "reserved")));
       setPick(""); setDlg("table");
