@@ -2,7 +2,7 @@ export const STATUSES = ["pending", "confirmed", "arrived", "seated", "completed
 export type Status = (typeof STATUSES)[number];
 export const ACTIVE_STATUSES: Status[] = ["pending", "confirmed", "arrived", "seated"];
 
-export type Action = "confirm" | "arrive" | "seat" | "complete" | "cancel" | "no_show" | "undo_arrive" | "undo_seat" | "reinstate";
+export type Action = "confirm" | "arrive" | "seat" | "complete" | "cancel" | "no_show" | "undo_arrive" | "undo_seat" | "reinstate" | "move_table";
 
 /** Single source of truth for the reservation lifecycle. */
 export const TRANSITIONS: Record<Action, { from: Status[]; to: Status }> = {
@@ -15,6 +15,8 @@ export const TRANSITIONS: Record<Action, { from: Status[]; to: Status }> = {
   undo_arrive: { from: ["arrived"], to: "confirmed" },
   undo_seat: { from: ["seated"], to: "arrived" },
   reinstate: { from: ["no_show"], to: "confirmed" },
+  /** seated party changes table: same status, the occupied tables change */
+  move_table: { from: ["seated"], to: "seated" },
 };
 
 export const canTransition = (from: Status, action: Action) => TRANSITIONS[action]?.from.includes(from) ?? false;

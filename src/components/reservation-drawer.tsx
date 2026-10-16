@@ -10,7 +10,7 @@ import { api, ApiError } from "@/lib/client/api";
 import { useApi } from "@/lib/client/hooks";
 import { SOURCE_LABEL } from "@/lib/client/format";
 
-type Action = "confirm" | "arrive" | "seat" | "complete" | "cancel" | "no_show" | "undo_arrive" | "undo_seat" | "reinstate";
+type Action = "confirm" | "arrive" | "seat" | "complete" | "cancel" | "no_show" | "undo_arrive" | "undo_seat" | "reinstate" | "move_table";
 
 export function ReservationDrawer({ id, onClose, onChanged, onEdit }: { id: string | null; onClose: () => void; onChanged: () => void; onEdit: (r: any) => void }) {  
   const { t, fmt } = useI18n();
@@ -88,7 +88,8 @@ export function ReservationDrawer({ id, onClose, onChanged, onEdit }: { id: stri
             <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
               <dt className="text-muted">{t("Table")}</dt>
               <dd className="flex flex-wrap items-center gap-1.5">{tables.length ? tables.map((x) => <Badge key={x.id} tone="dark">{x.name}</Badge>) : <span className="text-muted">{t("Not assigned")}</span>}
-                {operate && active && status !== "seated" && <button className="text-xs text-gold-strong underline" onClick={openTables}>{tables.length ? t("change") : t("assign")}</button>}</dd>
+                {operate && active && status !== "seated" && <button className="text-xs text-gold-strong underline" onClick={openTables}>{tables.length ? t("change") : t("assign")}</button>}
+                {operate && status === "seated" && <button className="text-xs text-gold-strong underline" onClick={openTables}>{t("move")}</button>}</dd>
               <dt className="text-muted">{t("Source")}</dt><dd>{t(SOURCE_LABEL[r.source] ?? r.source)}</dd>
               {r.guestPhone && <><dt className="text-muted">{t("Phone")}</dt><dd className="flex items-center gap-2"><a className="hover:underline" href={`tel:${r.guestPhone}`}>{r.guestPhone}</a><a className="text-ok text-xs underline" target="_blank" rel="noreferrer" href={`https://wa.me/${r.guestPhone.replace(/\D/g, "")}`}>WhatsApp</a></dd></>}
               {r.guestEmail && <><dt className="text-muted">{t("Email")}</dt><dd><a className="hover:underline" href={`mailto:${r.guestEmail}`}>{r.guestEmail}</a></dd></>}
@@ -153,13 +154,15 @@ export function ReservationDrawer({ id, onClose, onChanged, onEdit }: { id: stri
         <Field label={t("Total spend (optional)")} hint={t("Only entered amounts feed revenue reports. Leave empty if unknown.")}><Input type="number" min={0} step="1" inputMode="decimal" value={spend} onChange={(e) => setSpend(e.target.value)} placeholder="0" /></Field>
       </Dialog>
 
-      <Dialog open={dlg === "table"} onClose={() => setDlg(null)} size="sm" title={t("Choose a table")}
-        footer={<><Button onClick={() => setDlg(null)}>{t("Cancel")}</Button>
-          <Button variant="primary" disabled={!pick} loading={busy === "seat"} onClick={async () => {
-            if (r && (status === "seated" || false)) return;
-            try { if (status === "seated") return; await api.patch(`/api/v1/reservations/${id}`, { tableIds: [pick] }); toast.success(t("Table assigned")); setDlg(null); reload(); onChanged(); } catch (e) { toast.error(e); }
-          }}>{t("Assign table")}</Button>
-          {operate && status !== "seated" && <Button variant="gold" disabled={!pick} loading={busy === "seat"} onClick={() => run("seat", { tableIds: [pick] }, t("Guests seated"))}>{t("Assign & seat")}</Button>}</>}>
+      <Dialog open={dlg === "table"} onClose={() => setDlg(null)} size="sm" title={status === "seated" ? t("Move to another table") : t("Choose a table")}
+        footer={status === "seated"
+          ? <><Button onClick={() => setDlg(null)}>{t("Cancel")}</Button><Button variant="gold" disabled={!pick} loading={busy === "move_table"} onClick={() => run("move_table", { tableIds: [pick] }, t("Guests moved — the old table is awaiting cleaning"))}>{t("Move guests")}</Button></>
+          : <><Button onClick={() => setDlg(null)}>{t("Cancel")}</Button>
+            <Button variant="primary" disabled={!pick} loading={busy === "seat"} onClick={async () => {
+              try { await api.patch(`/api/v1/reservations/${id}`, { tableIds: [pick] }); toast.success(t("Table assigned")); setDlg(null); reload(); onChanged(); } catch (e) { toast.error(e); }
+            }}>{t("Assign table")}</Button>
+            {operate && <Button variant="gold" disabled={!pick} loading={busy === "seat"} onClick={() => run("seat", { tableIds: [pick] }, t("Guests seated"))}>{t("Assign & seat")}</Button>}</>}>
+        {status === "seated" && <p className="text-sm text-ink-2 mb-3">{t("The guests keep their reservation. The table they leave goes to “awaiting cleaning”, the new one becomes occupied.")}</p>}
         {freeTables.length === 0 ? <p className="text-sm text-muted">{t("No suitable table is free right now.")}</p> : (
           <Select value={pick} onChange={(e) => setPick(e.target.value)} aria-label={t("Table")}><option value="">{t("Select…")}</option>{freeTables.map((x) => <option key={x.id} value={x.id}>{x.name} · {x.capacity} {t("seats")} · {t(x.displayStatus)}</option>)}</Select>
         )}

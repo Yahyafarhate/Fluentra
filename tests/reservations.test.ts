@@ -203,3 +203,74 @@ describe("seating before the booked time", () => {
     await expect(transitionReservation(t2.owner, later.id, { action: "seat" })).rejects.toMatchObject({ code: "TABLE_BUSY_UNTIL" });
   });
 });
+
+describe("moving a seated party to another table", () => {
+  const status = (orgId: string, id: string) => withOrg(orgId, (db) => db.one<{ status: string }>(`SELECT status FROM tables WHERE id=$1`, [id])).then((r) => r.status);
+
+  it("moves the guests, marks the old table awaiting cleaning and the new one occupied, and audits it", async () => {
+    const t = await createTenant({ tables: [{ name: "A", capacity: 2 }, { name: "B", capacity: 2 }, { name: "C", capacity: 4 }] });
+    const [A, B] = t.tableIds;
+    const r = await createReservation(t.owner, booking(t, { date: futureDate(1), time: "20:00", partySize: 2, tableIds: [A] }));
+    // not seated yet → the dedicated action is refused (changing the table before seating is a plain edit)
+    await expect(transitionReservation(t.owner, r.id, { action: "move_table", tableIds: [B] })).rejects.toMatchObject({ code: "INVALID_TRANSITION" });
+    await transitionReservation(t.owner, r.id, { action: "seat" });
+    expect(await status(t.orgId, A)).toBe("occupied");
+
+    await expect(transitionReservation(t.owner, r.id, { action: "move_table", tableIds: [A] })).rejects.toMatchObject({ code: "SAME_TABLES" });
+    await expect(transitionReservation(t.owner, r.id, { action: "move_table" })).rejects.toMatchObject({ code: "NO_TABLE" });
+
+    const res = await transitionReservation(t.owner, r.id, { action: "move_table", tableIds: [B] });
+    expect(res.status).toBe("seated");
+    expect(await status(t.orgId, A)).toBe("cleaning");
+    expect(await status(t.orgId, B)).toBe("occupied");
+    const links = await withOrg(t.orgId, (db) => db.query<{ tableId: string; lower: Date }>(`SELECT table_id, lower(during) AS lower FROM reservation_tables WHERE reservation_id=$1`, [r.id]));
+    expect(links.map((l) => l.tableId)).toEqual([B]);
+    expect(links[0].lower.getTime()).toBeLessThanOrEqual(Date.now());
+    const visit = await withOrg(t.orgId, (db) => db.one<{ tableIds: string[] }>(`SELECT table_ids FROM visits WHERE reservation_id=$1`, [r.id]));
+    expect(visit.tableIds).toEqual([B]);
+    const audit = await withOrg(t.orgId, (db) => db.one<{ metadata: { fromTables: string[]; toTables: string[] } }>(`SELECT metadata FROM audit_logs WHERE action='reservation.move_table' AND entity_id=$1`, [r.id]));
+    expect(audit.metadata).toMatchObject({ fromTables: ["A"], toTables: ["B"] });
+
+    // completing the visit now releases the NEW table; the old one stays awaiting cleaning until staff mark it ready
+    await transitionReservation(t.owner, r.id, { action: "complete" });
+    expect(await status(t.orgId, B)).toBe("cleaning");
+    expect(await status(t.orgId, A)).toBe("cleaning");
+  });
+
+  it("refuses an occupied table, a table that is too small and a table that was just taken", async () => {
+    const t = await createTenant({ tables: [{ name: "A", capacity: 2 }, { name: "B", capacity: 2 }, { name: "C", capacity: 4 }] });
+    const [A, B, C] = t.tableIds;
+    const r = await createReservation(t.owner, booking(t, { date: futureDate(1), time: "20:00", partySize: 2, tableIds: [A] }));
+    await transitionReservation(t.owner, r.id, { action: "seat" });
+    const walkIn = await seatWalkIn(t.owner, { locationId: t.locationId, partySize: 2 });     // takes B or C
+    const taken = walkIn.tableIds[0];
+    await expect(transitionReservation(t.owner, r.id, { action: "move_table", tableIds: [taken] })).rejects.toBeTruthy();
+    expect(await status(t.orgId, A)).toBe("occupied");                                          // nothing changed
+    const big = await createReservation(t.owner, booking(t, { date: futureDate(1), time: "12:00", partySize: 4, tableIds: [C] }));
+    if (taken !== C) {
+      await transitionReservation(t.owner, big.id, { action: "seat" });
+      await expect(transitionReservation(t.owner, big.id, { action: "move_table", tableIds: [B === taken ? A : B] })).rejects.toMatchObject({ code: "INSUFFICIENT_CAPACITY" });
+    }
+  });
+
+  it("two parties cannot be moved onto the same table at once", async () => {
+    const t = await createTenant({ tables: [{ name: "A", capacity: 2 }, { name: "B", capacity: 2 }, { name: "C", capacity: 2 }] });
+    const [A, B, C] = t.tableIds;
+    const r1 = await createReservation(t.owner, booking(t, { date: futureDate(1), time: "19:00", partySize: 2, tableIds: [A] }));
+    const r2 = await createReservation(t.owner, booking(t, { date: futureDate(1), time: "19:00", partySize: 2, tableIds: [B] }));
+    await transitionReservation(t.owner, r1.id, { action: "seat" });
+    await transitionReservation(t.owner, r2.id, { action: "seat" });
+    const out = await Promise.allSettled([
+      transitionReservation(t.owner, r1.id, { action: "move_table", tableIds: [C] }),
+      transitionReservation(t.owner, r2.id, { action: "move_table", tableIds: [C] }),
+    ]);
+    expect(out.filter((o) => o.status === "fulfilled")).toHaveLength(1);
+    const winner = out[0].status === "fulfilled" ? [r1.id, A] : [r2.id, B];
+    const loser = out[0].status === "fulfilled" ? B : A;
+    expect(await status(t.orgId, C)).toBe("occupied");
+    expect(await status(t.orgId, winner[1] as string)).toBe("cleaning");
+    expect(await status(t.orgId, loser)).toBe("occupied");                                     // the other party never moved
+    const n = await withOrg(t.orgId, (db) => db.one<{ n: number }>(`SELECT count(*)::int AS n FROM reservation_tables WHERE table_id=$1`, [C]));
+    expect(n.n).toBe(1);
+  });
+});

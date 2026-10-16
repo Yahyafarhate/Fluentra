@@ -397,7 +397,7 @@ export async function updateReservation(ctx: Ctx, id: string, input: UpdateInput
 
 // ───────────────────────────── Lifecycle transitions ─────────────────────────────
 export const transitionSchema = z.object({
-  action: z.enum(["confirm", "arrive", "seat", "complete", "cancel", "no_show", "undo_arrive", "undo_seat", "reinstate"]),
+  action: z.enum(["confirm", "arrive", "seat", "complete", "cancel", "no_show", "undo_arrive", "undo_seat", "reinstate", "move_table"]),
   reason: z.string().trim().max(300).optional(),
   tableIds: z.array(z.string().uuid()).min(1).max(10).optional(),
   spendAmount: z.number().min(0).max(1_000_000).optional(),
@@ -421,6 +421,7 @@ export async function transitionReservationTx(db: Db, orgId: string, id: string,
   if (!canTransition(r.status, a)) throw conflict(`Cannot ${a.replace("_", " ")} a reservation that is ${r.status.replace("_", " ")}`, "INVALID_TRANSITION", { from: r.status, action: a });
   const to = TRANSITIONS[a].to;
   const ver = Date.now();
+  let auditExtra: Record<string, unknown> = {};
 
   switch (a) {
     case "confirm":
@@ -468,6 +469,41 @@ export async function transitionReservationTx(db: Db, orgId: string, id: string,
                       ON CONFLICT (reservation_id) WHERE reservation_id IS NOT NULL DO NOTHING`, [orgId, r.locationId, r.customerId, id, r.partySize, tables.map((t) => t.id)]);
       break;
     }
+    case "move_table": {
+      // A seated party changes table (e.g. table X → table Y). Old table(s) go to cleaning (or straight back to available when the
+      // cleaning workflow is off, like after a completed visit); new table(s) become occupied from now until the booked end.
+      if (actor.kind !== "staff") throw forbidden("Only staff can move a seated party", "FORBIDDEN");
+      if (!input.tableIds?.length) throw conflict("Choose the new table", "NO_TABLE");
+      const before = await tableStates(db, id);
+      const oldIds = new Set(before.map((t) => t.id));
+      const newIds = new Set(input.tableIds);
+      if (oldIds.size === newIds.size && [...oldIds].every((x) => newIds.has(x))) throw conflict("The party is already at this table", "SAME_TABLES");
+      const added = input.tableIds.filter((x) => !oldIds.has(x));
+      const removed = before.filter((t) => !newIds.has(t.id));
+      const endMs = Math.max(r.endAt.getTime() + loc.bufferMin * 60_000, now.getTime() + 15 * 60_000);
+      const day = await loadDay(db, loc, r.serviceDate, { excludeReservationId: id, now });
+      const err = validateManualAssignment({ tables: day.tables, combos: day.combos, busy: day.busy, tableIds: input.tableIds, start: now.getTime(), end: endMs, party: r.partySize });
+      if (err) throw conflict(`Cannot move to the selected table(s): ${err}`, err);
+      // physical state of the tables being added
+      const target = added.length ? await db.query<{ id: string; name: string; status: string }>(`SELECT id, name, status FROM tables WHERE id = ANY($1::uuid[]) AND location_id=$2 FOR UPDATE`, [added, r.locationId]) : [];
+      const bad = target.find((t) => t.status === "blocked" || t.status === "occupied" || (t.status === "cleaning" && !input.force));
+      if (bad) throw conflict(`Table ${bad.name} is ${bad.status === "cleaning" ? "awaiting cleaning" : bad.status}`, bad.status === "cleaning" ? "TABLE_NOT_READY" : "TABLE_UNAVAILABLE", { table: bad.name });
+      if (removed.length) await db.exec(`DELETE FROM reservation_tables WHERE reservation_id=$1 AND table_id = ANY($2::uuid[])`, [id, removed.map((t) => t.id)]);
+      try {
+        for (const tid of added) {
+          await db.exec(`INSERT INTO reservation_tables (reservation_id, table_id, org_id, location_id, during) VALUES ($1,$2,$3,$4,$5::tstzrange)`, [id, tid, orgId, r.locationId, rangeSql(now, new Date(endMs))]);
+        }
+      } catch (e) {
+        if ((e as { code?: string }).code === "23P01") throw conflict("That table is taken by another reservation", "TABLE_CONFLICT");
+        throw e;
+      }
+      if (added.length) await db.exec(`UPDATE tables SET status='occupied' WHERE id = ANY($1::uuid[])`, [added]);
+      if (removed.length) await db.exec(`UPDATE tables SET status=$2 WHERE id = ANY($1::uuid[])`, [removed.map((t) => t.id), loc.cleaningWorkflow ? "cleaning" : "available"]);
+      const after = await tableStates(db, id);
+      await db.exec(`UPDATE visits SET table_ids=$2 WHERE reservation_id=$1`, [id, after.map((t) => t.id)]);
+      auditExtra = { fromTables: before.map((t) => t.name), toTables: after.map((t) => t.name) };
+      break;
+    }
     case "undo_seat": {
       await db.exec(`UPDATE tables SET status='available' WHERE id IN (SELECT table_id FROM reservation_tables WHERE reservation_id=$1)`, [id]);
       await db.exec(`DELETE FROM visits WHERE reservation_id=$1`, [id]);
@@ -503,7 +539,7 @@ export async function transitionReservationTx(db: Db, orgId: string, id: string,
       break;
     }
   }
-  if (actor.kind === "staff") await audit(db, actor.ctx, `reservation.${a}`, "reservation", id, { from: r.status, to, reason: input.reason });
+  if (actor.kind === "staff") await audit(db, actor.ctx, `reservation.${a}`, "reservation", id, { from: r.status, to, reason: input.reason, ...auditExtra });
   else await audit(db, null, `reservation.${a}`, "reservation", id, { from: r.status, to, by: "guest" }, { orgId });
   await notifyChange(db, orgId, r.locationId, "reservation");
   return { id, status: to };
