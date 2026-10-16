@@ -121,7 +121,7 @@ export async function createReservationTx(db: Db, input: BookingInput, o: Bookin
   let tableIds: string[] | null = null;
   if (o.seatNow && !input.tableIds?.length) {
     // walk-ins sit at a table that is physically ready right now
-    tableIds = pickTables({ tables: day.tables.filter((t) => t.status === "available"), combos: day.combos, busy: day.busy, start: start.getTime(), end: tableEnd.getTime(), party: input.partySize, allowGrouping: true });
+    tableIds = pickTables({ tables: day.tables.filter((t) => t.status === "available"), combos: day.combos, busy: day.busy, start: start.getTime(), end: tableEnd.getTime(), party: input.partySize, allowGrouping: true, obstacles: day.obstacles });
     if (!tableIds) throw conflict(RULE_REASON_MSG.full[1], "NO_AVAILABILITY");
   } else if (input.tableIds?.length) {
     if (o.actor.kind !== "staff") throw forbidden("Guests cannot choose tables", "FORBIDDEN");
@@ -132,7 +132,7 @@ export async function createReservationTx(db: Db, input: BookingInput, o: Bookin
   } else if (slot.available) {
     tableIds = slot.tableIds!;
   } else if (force && slot.reason !== "full" && slot.reason !== "needs_grouping") {
-    tableIds = pickTables({ tables: day.tables, combos: day.combos, busy: day.busy, start: start.getTime(), end: tableEnd.getTime(), party: input.partySize, allowGrouping: true });
+    tableIds = pickTables({ tables: day.tables, combos: day.combos, busy: day.busy, start: start.getTime(), end: tableEnd.getTime(), party: input.partySize, allowGrouping: true, obstacles: day.obstacles });
     if (!tableIds) throw conflict(RULE_REASON_MSG.full[1], "NO_AVAILABILITY");
   } else {
     const [c, m] = RULE_REASON_MSG[slot.reason ?? "full"];
@@ -333,7 +333,7 @@ async function reallocate(db: Db, loc: LocationRow, r: ResRow, change: { date: s
     // prefer keeping the current tables when they still fit
     const cur = (await db.query<{ tableId: string }>(`SELECT table_id FROM reservation_tables WHERE reservation_id=$1`, [r.id])).map((x) => x.tableId);
     if (cur.length && !validateManualAssignment({ tables: day.tables, combos: day.combos, busy: day.busy, tableIds: cur, start: start.getTime(), end: tableEnd.getTime(), party: change.partySize })) tableIds = cur;
-    else tableIds = pickTables({ tables: day.tables, combos: day.combos, busy: day.busy, start: start.getTime(), end: tableEnd.getTime(), party: change.partySize, onlineOnly: change.channel === "online", allowGrouping: change.channel === "staff" });
+    else tableIds = pickTables({ tables: day.tables, combos: day.combos, busy: day.busy, start: start.getTime(), end: tableEnd.getTime(), party: change.partySize, onlineOnly: change.channel === "online", allowGrouping: change.channel === "staff", obstacles: day.obstacles });
   }
   if (!tableIds) throw conflict(RULE_REASON_MSG.full[1], "NO_AVAILABILITY");
   await db.exec(`DELETE FROM reservation_tables WHERE reservation_id=$1`, [r.id]);
@@ -571,7 +571,7 @@ export async function listAssignableTables(ctx: Ctx, id: string) {
     const start = r.startAt.getTime(), end = r.endAt.getTime() + loc.bufferMin * 60_000;
     const free = day.tables.filter((t) => t.status !== "blocked" && isFree(t.id, start, end, day.busy));
     const current = (await db.query<{ tableId: string }>(`SELECT table_id FROM reservation_tables WHERE reservation_id=$1`, [id])).map((x) => x.tableId);
-    const suggested = pickTables({ tables: day.tables, combos: day.combos, busy: day.busy, start, end, party: r.partySize, allowGrouping: true }) ?? [];
+    const suggested = pickTables({ tables: day.tables, combos: day.combos, busy: day.busy, start, end, party: r.partySize, allowGrouping: true, obstacles: day.obstacles }) ?? [];
     return {
       partySize: r.partySize, current, suggested, groupingAccepted: r.groupingAccepted,
       tables: free.map((t) => ({ id: t.id, name: t.name, capacity: t.capacity, floorId: t.floorId })).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true })),

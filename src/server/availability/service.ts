@@ -4,7 +4,7 @@ import { isoWeekday, minToTime, daysBetween } from "@/lib/time";
 import { noonOffsetMin, todayLocal } from "@/lib/tz";
 import {
   durationFor, pickTables, resolveWindows, slotTimes,
-  type BusyInterval, type ComboLite, type DurationRule, type ServiceRow, type SpecialDayRow, type TableLite, type ServiceWindow,
+  type BusyInterval, type ComboLite, type DurationRule, type Obstacle, type ServiceRow, type SpecialDayRow, type TableLite, type ServiceWindow,
 } from "./engine";
 
 export interface LocationRow {
@@ -36,11 +36,16 @@ export interface DayData {
   closedLabel: string | null;
   tables: TableLite[];
   combos: ComboLite[];
+  obstacles: Obstacle[];
   busy: BusyInterval[];
   reservations: Array<{ id: string; startAt: Date; partySize: number; serviceId: string | null }>;
   /** local wall-clock minute-of-day -> UTC instant for this date (offset resolved by the database) */
   utcAt: (minuteOfDay: number) => Date;
   today: string;
+}
+
+export async function loadObstacles(db: Db, locationId: string): Promise<Obstacle[]> {
+  return db.query<Obstacle>(`SELECT floor_id, x, y, w, h, rotation FROM floor_items WHERE location_id = $1 AND kind IN ('pool','basin','wall')`, [locationId]);
 }
 
 export async function loadTables(db: Db, locationId: string): Promise<{ tables: TableLite[]; combos: ComboLite[] }> {
@@ -83,6 +88,7 @@ export async function loadDay(db: Db, loc: LocationRow, date: string, opts: { ex
     `SELECT closed, label, to_char(start_time,'HH24:MI') AS start_time, to_char(last_seating,'HH24:MI') AS last_seating FROM special_days WHERE location_id=$1 AND date=$2`, [loc.id, date]);
   const res = resolveWindows(services, isoWeekday(date), loc.slotIntervalMin, special);
   const { tables, combos } = await loadTables(db, loc.id);
+  const obstacles = await loadObstacles(db, loc.id);
   const offsetMin = await noonOffsetMin(db, date, loc.timezone);
   const [y, m, d] = date.split("-").map(Number);
   const midnight = Date.UTC(y, m - 1, d);
@@ -93,7 +99,7 @@ export async function loadDay(db: Db, loc: LocationRow, date: string, opts: { ex
       WHERE location_id = $1 AND service_date = $2 AND status IN ('pending','confirmed','arrived','seated','completed')
         AND ($3::uuid IS NULL OR id <> $3)`, [loc.id, date, opts.excludeReservationId ?? null]);
   const today = await todayLocal(db, loc.timezone, opts.now);
-  return { loc, windows: res.windows, closed: res.closed, closedLabel: res.label, tables, combos, busy, reservations, utcAt, today };
+  return { loc, windows: res.windows, closed: res.closed, closedLabel: res.label, tables, combos, obstacles, busy, reservations, utcAt, today };
 }
 
 export type SlotReason = "needs_grouping" | "past" | "notice" | "window" | "party_small" | "party_large" | "pacing" | "service_cap" | "full" | "closed";
@@ -152,7 +158,7 @@ export function evaluateStart(day: DayData, date: string, startMin: number, w: S
   const pickArgs = {
     tables: day.tables, combos: day.combos, busy: day.busy,
     start: startAt.getTime(), end: end.getTime() + loc.bufferMin * 60_000, party: q.partySize,
-    onlineOnly: q.channel === "online", preferSectionId: q.preferSectionId, onlySectionId: q.sectionId,
+    onlineOnly: q.channel === "online", preferSectionId: q.preferSectionId, onlySectionId: q.sectionId, obstacles: day.obstacles,
   };
   if (tableIds) return { ...base, available: true, tableIds };
   // a party bigger than every single table: put the nearest free tables together

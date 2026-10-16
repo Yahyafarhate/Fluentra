@@ -10,6 +10,7 @@ import { useI18n } from "@/lib/i18n/client";
 import { api, ApiError, qs } from "@/lib/client/api";
 import { useApi, useLive } from "@/lib/client/hooks";
 import { TableNode, STATUS_STYLE, type FloorTable } from "./table-node";
+import { DecorNode, decorName, type FloorItem } from "./decor-node";
 
 const OFFSETS = [0, 30, 60, 120, 180];
 
@@ -75,6 +76,7 @@ export function LiveFloor() {
         ) : (
           <div className="overflow-x-auto scroll-thin rounded-2xl border border-line bg-[linear-gradient(var(--color-sunken)_1px,transparent_1px),linear-gradient(90deg,var(--color-sunken)_1px,transparent_1px)] [background-size:24px_24px] bg-surface">
             <div dir="ltr" className="relative min-w-[760px] [container-type:inline-size]" style={{ aspectRatio: `${floor.width} / ${floor.height}` }}>
+              {((data?.items ?? []) as FloorItem[]).filter((i) => i.floorId === floor.id).map((i) => <DecorNode key={i.id} item={i} floor={floor} mode="live" name={decorName(i.kind, t)} />)}
               {onFloor.map((x) => <TableNode key={x.id} t={x} floor={floor} mode="live" selected={sel === x.id || hl === x.id} dim={!matches(x)} onClick={() => setSel(x.id)} />)}
             </div>
           </div>
