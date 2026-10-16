@@ -99,18 +99,18 @@ export function AppShell({ me, children }: { me: Me; children: ReactNode }) {
           <header className="sticky top-0 z-30 bg-canvas/85 backdrop-blur border-b border-line no-print">
             <div className="flex items-center gap-2 px-4 sm:px-6 lg:px-8 h-14">
               <IconButton icon="menu" label={t("Menu")} className="lg:hidden" onClick={() => setMenu(true)} />
-              <Link href="/app" className="lg:hidden"><Logo size={24} /></Link>
+              <Link href="/app" className="lg:hidden shrink-0"><span className="sm:hidden"><Logo size={24} compact /></span><span className="hidden sm:inline"><Logo size={24} /></span></Link>
               {me.locations.length > 0 && (
-                <div className="ms-auto lg:ms-0 flex items-center gap-2">
+                <div className="ms-auto lg:ms-0 flex min-w-0 items-center gap-2">
                   <Icon name="pin" size={16} className="text-muted hidden sm:block" />
                   {me.locations.length > 1 ? (
-                    <select value={locationId ?? ""} onChange={(e) => setLocationId(e.target.value)} aria-label={t("Location")} className="h-9 rounded-lg border border-line-strong bg-surface px-2.5 text-sm font-medium max-w-[46vw] sm:max-w-xs">
+                    <select value={locationId ?? ""} onChange={(e) => setLocationId(e.target.value)} aria-label={t("Location")} className="h-9 rounded-lg border border-line-strong bg-surface px-2.5 text-sm font-medium max-w-[34vw] sm:max-w-xs">
                       {me.locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
                     </select>
-                  ) : <span className="text-sm font-medium truncate max-w-[50vw]">{me.locations[0].name}</span>}
+                  ) : <span className="text-sm font-medium truncate max-w-[34vw] sm:max-w-[50vw]">{me.locations[0].name}</span>}
                 </div>
               )}
-              <div className="ms-auto flex items-center gap-1">
+              <div className="ms-auto flex shrink-0 items-center gap-1">
                 {trialDays !== null && <Link href="/app/billing"><Badge tone="gold" className="hidden sm:inline-flex">{trialDays > 0 ? t("Trial: {n} days left", { n: trialDays }) : t("Trial ended")}</Badge></Link>}
                 <LangSwitch />
               </div>

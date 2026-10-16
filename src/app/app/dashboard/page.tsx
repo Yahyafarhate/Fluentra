@@ -70,7 +70,7 @@ export default function DashboardPage() {
           {d.revenue.note && <p className="text-xs text-muted -mt-3 flex items-center gap-1.5"><Icon name="info" size={14} />{t(d.revenue.note)}</p>}
 
           <div className="grid xl:grid-cols-3 gap-6">
-            <div className="xl:col-span-2 space-y-6">
+            <div className="xl:col-span-2 min-w-0 space-y-6">
               {d.occupancy && (
                 <Card>
                   <CardHeader title={t("Tables right now")} subtitle={`${d.occupancy.tables} ${t("tables")} · ${d.occupancy.seats} ${t("seats")} · ${d.occupancy.seatedGuests} ${t("guests seated")}`} action={can("floor.view") ? <Link href="/app/floor"><Button size="sm" icon="floor">{t("Open floor plan")}</Button></Link> : undefined} />
