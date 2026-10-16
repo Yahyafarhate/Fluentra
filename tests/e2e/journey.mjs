@@ -85,7 +85,7 @@ try {
   await sp.getByText(NAME).first().waitFor({ timeout: 15000 });
   step("staff found the online booking by name");
   await sp.getByText(NAME).first().click();
-  const dlg = sp.locator("dialog[open]").first();
+  const dlg = sp.locator("[role=dialog]").first();
   await dlg.getByRole("button", { name: /Mark arrived/i }).click();
   await sp.getByText(/Guest arrived/i).first().waitFor();
   await dlg.getByRole("button", { name: /^Seat$/ }).click();
@@ -99,8 +99,8 @@ try {
   step(`guest checked in and seated at table ${seated.name} (occupied)`);
 
   await dlg.getByRole("button", { name: /Complete visit/i }).click();
-  await sp.locator("dialog[open]").last().getByLabel(/Total spend/i).fill("480");
-  await sp.locator("dialog[open]").last().getByRole("button", { name: /Complete & release table/i }).click();
+  await sp.locator("[role=dialog]").last().getByLabel(/Total spend/i).fill("480");
+  await sp.locator("[role=dialog]").last().getByRole("button", { name: /Complete & release table/i }).click();
   await sp.getByText(/table released/i).first().waitFor();
   floor = await (await sp.request.get(`${BASE}/api/v1/floor/state?locationId=${locId}`)).json();
   assert.equal(floor.tables.find((t) => t.id === seated.id).displayStatus, "cleaning");
