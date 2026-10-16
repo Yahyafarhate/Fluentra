@@ -45,7 +45,7 @@ export interface DayData {
 
 export async function loadTables(db: Db, locationId: string): Promise<{ tables: TableLite[]; combos: ComboLite[] }> {
   const tables = await db.query<TableLite>(
-    `SELECT id, name, min_capacity, capacity, section_id, floor_id, bookable_online, status, active FROM tables WHERE location_id = $1 AND active`, [locationId]);
+    `SELECT id, name, min_capacity, capacity, section_id, floor_id, bookable_online, status, active, x, y, w, h FROM tables WHERE location_id = $1 AND active`, [locationId]);
   const combos = await db.query<ComboLite>(
     `SELECT c.id, c.name, c.min_capacity, c.capacity, array_agg(ct.table_id) AS table_ids
        FROM table_combinations c JOIN table_combination_tables ct ON ct.combination_id = c.id
@@ -96,11 +96,11 @@ export async function loadDay(db: Db, loc: LocationRow, date: string, opts: { ex
   return { loc, windows: res.windows, closed: res.closed, closedLabel: res.label, tables, combos, busy, reservations, utcAt, today };
 }
 
-export type SlotReason = "past" | "notice" | "window" | "party_small" | "party_large" | "pacing" | "service_cap" | "full" | "closed";
+export type SlotReason = "needs_grouping" | "past" | "notice" | "window" | "party_small" | "party_large" | "pacing" | "service_cap" | "full" | "closed";
 
 export interface Slot {
   time: string; startAt: string; endAt: string; serviceId: string | null; serviceName: string;
-  available: boolean; reason?: SlotReason; durationMin: number; tableIds?: string[];
+  available: boolean; reason?: SlotReason; durationMin: number; tableIds?: string[]; grouped?: boolean;
 }
 
 export interface SlotQuery {
@@ -109,6 +109,8 @@ export interface SlotQuery {
   now?: Date;
   preferSectionId?: string | null;
   sectionId?: string | null;
+  /** the guest agrees that several tables are put together (staff always may) */
+  groupingAccepted?: boolean;
 }
 
 /** Evaluates one candidate start against every booking rule. Used by both slot listing and reservation creation. */
@@ -147,8 +149,17 @@ export function evaluateStart(day: DayData, date: string, startMin: number, w: S
     start: startAt.getTime(), end: end.getTime() + loc.bufferMin * 60_000, party: q.partySize,
     onlineOnly: q.channel === "online", preferSectionId: q.preferSectionId, onlySectionId: q.sectionId,
   });
-  if (!tableIds) return fail("full");
-  return { ...base, available: true, tableIds };
+  const pickArgs = {
+    tables: day.tables, combos: day.combos, busy: day.busy,
+    start: startAt.getTime(), end: end.getTime() + loc.bufferMin * 60_000, party: q.partySize,
+    onlineOnly: q.channel === "online", preferSectionId: q.preferSectionId, onlySectionId: q.sectionId,
+  };
+  if (tableIds) return { ...base, available: true, tableIds };
+  // a party bigger than every single table: put the nearest free tables together
+  const grouped = pickTables({ ...pickArgs, allowGrouping: true });
+  if (!grouped) return fail("full");
+  if (q.channel === "online" && !q.groupingAccepted) return fail("needs_grouping");
+  return { ...base, available: true, tableIds: grouped, grouped: true };
 }
 
 export async function computeSlots(db: Db, loc: LocationRow, date: string, q: SlotQuery & { excludeReservationId?: string; excludeHoldToken?: string }) {

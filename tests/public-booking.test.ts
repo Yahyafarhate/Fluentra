@@ -40,15 +40,21 @@ describe("public booking API", () => {
     expect(r.status).toBe(201);
     expect(r.json.status).toBe("confirmed");
     expect(r.json.manageUrl).toMatch(/^\/r\//);
-    await runDueJobs(50);
     const cookie = await loginAs(t.ownerEmail, undefined, "20.3.0.2");
     const list = await api.v1("GET", `/reservations?locationId=${t.locationId}&q=salma`, { cookie });
     expect(list.json.reservations).toHaveLength(1);
     expect(list.json.reservations[0].source).toBe("online");
-    const notes = await api.v1("GET", `/notifications`, { cookie });
-    const conf = notes.json.notifications.find((n: { templateKey: string }) => n.templateKey === "booking_confirmation");
+    // other test files share the job queue: keep running due jobs until this tenant's confirmation has left "queued"
+    let conf: { status: string } | undefined;
+    for (let i = 0; i < 20; i++) {
+      await runDueJobs(50);
+      const notes = await api.v1("GET", `/notifications`, { cookie });
+      conf = notes.json.notifications.find((n: { templateKey: string }) => n.templateKey === "booking_confirmation");
+      if (conf && conf.status !== "queued") break;
+      await new Promise((r) => setTimeout(r, 100));
+    }
     expect(conf).toBeTruthy();
-    expect(conf.status).toBe("simulated"); // clearly NOT "sent": no provider connected
+    expect(conf!.status).toBe("simulated"); // clearly NOT "sent": no provider connected
   });
 
   it("guests manage their booking only via the signed link; tampered tokens fail", async () => {

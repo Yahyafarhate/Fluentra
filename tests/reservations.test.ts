@@ -1,7 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { withOrg, withSystem } from "@/lib/db";
 import { createTenant, booking, futureDate } from "./helpers";
-import { createReservation, transitionReservation, updateReservation, listMoveTargets, listReservations, getReservation, seatWalkIn } from "@/server/reservations/service";
+import { createReservationTx, listAssignableTables, createReservation, transitionReservation, updateReservation, listMoveTargets, listReservations, getReservation, seatWalkIn } from "@/server/reservations/service";
 import { computeSlots } from "@/server/availability/service";
 import { loadLocation } from "@/server/availability/service";
 
@@ -316,5 +316,55 @@ describe("changing the table of a seated party through the edit form", () => {
     await withSystem((db) => db.exec(`UPDATE tables SET status='occupied' WHERE id=$1`, [B]));   // stale leftover
     await withOrg(t.orgId, (db) => setTableStatus(db, t.owner, B, { status: "available" }));
     expect(await status(t.orgId, B)).toBe("available");
+  });
+});
+
+describe("grouping tables for a large party", () => {
+  const big = async () => {
+    const t = await createTenant({ tables: [{ name: "A", capacity: 8 }, { name: "B", capacity: 4 }, { name: "C", capacity: 4 }] });
+    await withSystem((db) => db.exec(`UPDATE locations SET max_party_online=20 WHERE id=$1`, [t.locationId]));
+    orgs.push(t.orgId);
+    return t;
+  };
+  // guest bookings queue confirmation messages; drop them so they cannot compete with other test files for the shared worker batch
+  const orgs: string[] = [];
+  afterEach(async () => { if (orgs.length) await withSystem((db) => db.exec(`DELETE FROM notifications WHERE status='queued' AND org_id = ANY($1::uuid[])`, [orgs.splice(0)])); });
+  const guest = (t: Awaited<ReturnType<typeof big>>, over: Record<string, unknown> = {}) => withOrg(t.orgId, (db) =>
+    createReservationTx(db, booking(t, { date: futureDate(3), time: "20:00", partySize: 12, guestPhone: "+212600000099", source: "online", ...over }), { orgId: t.orgId, actor: { kind: "guest" } }));
+
+  it("an online guest must accept grouping; the booking then waits for validation", async () => {
+    const t = await big();
+    await expect(guest(t)).rejects.toMatchObject({ code: "GROUPING_REQUIRED" });                    // not accepted → refused
+    const r = await guest(t, { groupingAccepted: true });
+    expect(r.status).toBe("pending");                                                              // even if auto-confirm is on
+    expect(r.tableIds).toHaveLength(2);
+    const d = await withOrg(t.orgId, (db) => db.one<{ groupingAccepted: boolean }>(`SELECT grouping_accepted FROM reservations WHERE id=$1`, [r.id]));
+    expect(d.groupingAccepted).toBe(true);
+    // the grouped tables are really reserved: a second 12-person party finds nothing
+    await expect(guest(t, { groupingAccepted: true, guestPhone: "+212600000098" })).rejects.toMatchObject({ code: "NO_AVAILABILITY" });
+  });
+
+  it("a validator sees free tables, a suggestion, and can choose the tables by hand", async () => {
+    const t = await big();
+    const [A, B, C] = t.tableIds;
+    const r = await guest(t, { groupingAccepted: true });
+    const a = await listAssignableTables(t.owner, r.id);
+    expect(a.suggested).toContain(A);                                                              // the 8-seater + one 4-seater
+    expect(a.suggested).toHaveLength(2);
+    expect(a.tables.map((x) => x.id).sort()).toEqual([A, B, C].sort());
+    await updateReservation(t.owner, r.id, { tableIds: [A, C] });
+    const links = await withOrg(t.orgId, (db) => db.query<{ tableId: string }>(`SELECT table_id FROM reservation_tables WHERE reservation_id=$1`, [r.id]));
+    expect(links.map((l) => l.tableId).sort()).toEqual([A, C].sort());
+    await expect(updateReservation(t.owner, r.id, { tableIds: [B, C] })).rejects.toMatchObject({ code: "INSUFFICIENT_CAPACITY" });
+    await transitionReservation(t.owner, r.id, { action: "confirm" });
+    const seated = await transitionReservation(t.owner, r.id, { action: "seat" });
+    expect(seated.status).toBe("seated");
+  });
+
+  it("staff bookings group automatically without the guest flag", async () => {
+    const t = await big();
+    const r = await createReservation(t.owner, booking(t, { date: futureDate(3), time: "20:00", partySize: 12 }));
+    expect(r.tableIds).toHaveLength(2);
+    expect(r.status).toBe("confirmed");
   });
 });

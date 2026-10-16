@@ -36,7 +36,7 @@ export async function getPublicRestaurant(slug: string) {
   });
 }
 
-export const publicSlotsQuery = z.object({ date: z.string().refine(isDateStr), partySize: z.coerce.number().int().min(1).max(100), sectionId: z.string().uuid().optional() });
+export const publicSlotsQuery = z.object({ date: z.string().refine(isDateStr), partySize: z.coerce.number().int().min(1).max(100), sectionId: z.string().uuid().optional(), grouping: z.enum(["1"]).optional() });
 
 /** Public availability — never exposes table ids, names or other guests' data. */
 export async function getPublicSlots(slug: string, q: z.infer<typeof publicSlotsQuery>) {
@@ -46,7 +46,7 @@ export async function getPublicSlots(slug: string, q: z.infer<typeof publicSlots
     if (!loc.onlineBookingEnabled) throw forbidden("Online booking is not available", "ONLINE_BOOKING_DISABLED");
     const today = await todayLocal(db, loc.timezone);
     if (daysBetween(today, q.date) < 0) throw badRequest("Pick a date in the future", "IN_THE_PAST");
-    const res = await computeSlots(db, loc, q.date, { channel: "online", partySize: q.partySize, sectionId: q.sectionId });
+    const res = await computeSlots(db, loc, q.date, { channel: "online", partySize: q.partySize, sectionId: q.sectionId, groupingAccepted: q.grouping === "1" });
     return {
       date: res.date, closed: res.closed, closedLabel: res.closedLabel, partySize: q.partySize,
       slots: res.slots.map((s) => ({ time: s.time, available: s.available, reason: s.available ? undefined : s.reason, service: s.serviceName, durationMin: s.durationMin })),
