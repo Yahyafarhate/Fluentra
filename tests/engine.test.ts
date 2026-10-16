@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { durationFor, pickTables, resolveWindows, slotTimes, validateManualAssignment, type TableLite, type BusyInterval } from "@/server/availability/engine";
+import { durationFor, groupTables, largestSingle, pickTables, resolveWindows, slotTimes, validateManualAssignment, type TableLite, type BusyInterval } from "@/server/availability/engine";
 import { simulateWait } from "@/server/waitlist/service";
 import { canTransition, nextActions } from "@/server/reservations/state";
 
@@ -83,5 +83,34 @@ describe("waitlist wait estimation", () => {
   it("does not seat a party into a gap that is too short for a reservation that follows", () => {
     const busy = [{ tableId: "a", start: 20 * 60_000, end: 80 * 60_000 }];
     expect(simulateWait({ ...base, tables: [T("a", 4)], busy, ahead: [], party: 2 })).toBe(80);
+  });
+});
+
+describe("grouping tables for a party bigger than any single table", () => {
+  const at = (id: string, capacity: number, x: number, y: number, extra: Partial<TableLite> = {}) => T(id, capacity, { x, y, w: 10, h: 10, ...extra });
+  const base = { busy: [] as BusyInterval[], start: 0, end: H };
+  it("only groups when the party exceeds the largest table", () => {
+    const tables = [at("a", 8, 0, 0), at("b", 4, 20, 0), at("c", 4, 400, 0)];
+    expect(largestSingle(tables)).toBe(8);
+    expect(pickTables({ tables, combos: [], ...base, party: 8, allowGrouping: true })).toEqual(["a"]);
+    expect(pickTables({ tables, combos: [], ...base, party: 12 })).toBeNull();
+    expect(pickTables({ tables, combos: [], ...base, party: 12, allowGrouping: true })!.sort()).toEqual(["a", "b"]);
+  });
+  it("takes the nearest tables, wasting the fewest seats", () => {
+    const tables = [at("a", 8, 0, 0), at("far", 4, 500, 500), at("near", 4, 15, 0), at("tiny", 2, 12, 0)];
+    expect(groupTables({ tables, ...base, party: 12 })!.sort()).toEqual(["a", "near"]);
+    // 10 people: 8 + 2 wastes nothing, even though a 4 is slightly closer
+    expect(groupTables({ tables: [at("a", 8, 0, 0), at("four", 4, 12, 0), at("two", 2, 30, 0)], ...base, party: 10 })!.sort()).toEqual(["a", "two"]);
+  });
+  it("uses any number of tables, skips busy / blocked / other floors, and returns null when nothing fits", () => {
+    const tables = [at("a", 4, 0, 0), at("b", 4, 12, 0), at("c", 4, 24, 0), at("d", 4, 36, 0), at("x", 8, 0, 0, { floorId: "other" }), at("z", 4, 48, 0, { status: "blocked" })];
+    expect(groupTables({ tables, ...base, party: 16 })!.sort()).toEqual(["a", "b", "c", "d"]);
+    expect(groupTables({ tables, busy: [{ tableId: "d", start: 0, end: H }], start: 0, end: H, party: 16 })).toBeNull();
+  });
+  it("accepts an ad-hoc set of tables for a validator only when asked to", () => {
+    const tables = [at("a", 8, 0, 0), at("b", 4, 20, 0)];
+    expect(validateManualAssignment({ tables, combos: [], busy: [], tableIds: ["a", "b"], start: 0, end: H, party: 12 })).toBe("INCOMPATIBLE_TABLES");
+    expect(validateManualAssignment({ tables, combos: [], busy: [], tableIds: ["a", "b"], start: 0, end: H, party: 12, adhoc: true })).toBeNull();
+    expect(validateManualAssignment({ tables, combos: [], busy: [], tableIds: ["a", "b"], start: 0, end: H, party: 13, adhoc: true })).toBe("INSUFFICIENT_CAPACITY");
   });
 });

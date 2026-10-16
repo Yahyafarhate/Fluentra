@@ -24,16 +24,18 @@ export function BookingWidget({ r, campaignId }: { r: PublicRestaurant; campaign
   const [f, setF] = useState({ guestName: "", guestPhone: "", guestEmail: "", occasion: "", specialRequests: "", consentEmail: false, consentWhatsapp: false, website: "" });
   const [err, setErr] = useState<ApiError | null>(null); const [busy, setBusy] = useState(false);
   const mounted = useRef(Date.now());
+  const [grouping, setGrouping] = useState(false);
+  const bigParty = r.largestTable != null && party > r.largestTable;
 
   const load = async () => {
     setLoading(true); setSlotsErr(null);
-    try { setSlots(await api.get(`/api/public/restaurants/${r.slug}/slots${qs({ date, partySize: party, sectionId: section || undefined })}`)); } catch (e) { setSlots(null); setSlotsErr((e as ApiError).message); } finally { setLoading(false); }
+    try { setSlots(await api.get(`/api/public/restaurants/${r.slug}/slots${qs({ date, partySize: party, sectionId: section || undefined, grouping: bigParty && grouping ? "1" : undefined })}`)); } catch (e) { setSlots(null); setSlotsErr((e as ApiError).message); } finally { setLoading(false); }
   };
-  useEffect(() => { setTime(null); setHold(null); if (!r.onlineBookingEnabled) return; const h = setTimeout(load, 150); return () => clearTimeout(h); }, [date, party, section]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setTime(null); setHold(null); if (!r.onlineBookingEnabled) return; const h = setTimeout(load, 150); return () => clearTimeout(h); }, [date, party, section, grouping]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function pick(s: Slot) {
     setTime(s.time); setErr(null);
-    try { const h = await api.post(`/api/public/restaurants/${r.slug}/holds`, { date, time: s.time, partySize: party, sectionId: section || undefined }); setHold({ token: h.holdToken, expiresAt: new Date(h.expiresAt).getTime() }); }
+    try { const h = await api.post(`/api/public/restaurants/${r.slug}/holds`, { date, time: s.time, partySize: party, sectionId: section || undefined, groupingAccepted: bigParty && grouping ? true : undefined }); setHold({ token: h.holdToken, expiresAt: new Date(h.expiresAt).getTime() }); }
     catch (e) { setHold(null); setTime(null); setErr(e as ApiError); load(); }
   }
   useEffect(() => { if (!hold) { setSecs(0); return; } const i = setInterval(() => { const s = Math.max(0, Math.round((hold.expiresAt - Date.now()) / 1000)); setSecs(s); if (s === 0) { setHold(null); setTime(null); load(); } }, 1000); return () => clearInterval(i); }, [hold]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -48,7 +50,7 @@ export function BookingWidget({ r, campaignId }: { r: PublicRestaurant; campaign
     try {
       const res = await api.post(`/api/public/restaurants/${r.slug}/bookings`, {
         date, time, partySize: party, guestName: f.guestName, guestPhone: f.guestPhone || undefined, guestEmail: f.guestEmail || undefined, occasion: f.occasion || undefined,
-        specialRequests: f.specialRequests || undefined, sectionId: section || undefined, holdToken: hold?.token, campaignId, website: f.website, elapsedMs: Date.now() - mounted.current,
+        specialRequests: f.specialRequests || undefined, sectionId: section || undefined, groupingAccepted: bigParty && grouping ? true : undefined, holdToken: hold?.token, campaignId, website: f.website, elapsedMs: Date.now() - mounted.current,
         language: locale, consent: { email: f.consentEmail && !!f.guestEmail, whatsapp: f.consentWhatsapp && !!f.guestPhone },
       });
       router.push(`${res.manageUrl}?new=1`);
@@ -72,18 +74,20 @@ export function BookingWidget({ r, campaignId }: { r: PublicRestaurant; campaign
               <Field label={t("Date")}><Input type="date" value={date} min={r.today} max={r.maxDate} onChange={(e) => e.target.value && setDate(e.target.value)} /></Field>
               {r.seatingOptions.length > 1 && <Field label={t("Seating area")} className="sm:col-span-2"><Select value={section} onChange={(e) => setSection(e.target.value)}><option value="">{t("No preference")}</option>{r.seatingOptions.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</Select></Field>}
             </div>
+            {bigParty && <div className="mt-3 rounded-xl border border-line p-3"><Switch checked={grouping} onChange={setGrouping} label={t("Accept that several tables are put together")} description={t("Your party is larger than our biggest table. The restaurant will place you on neighbouring tables and confirm your reservation — it stays pending until then.")} /></div>}
             <p className="text-xs text-muted mt-2">{t("Parties larger than {n}? Please call us.", { n: r.maxPartyOnline })}{r.phone ? ` ${r.phone}` : ""}</p>
 
             <div className="mt-5">
               <div className="flex items-center justify-between mb-2"><h3 className="text-sm font-medium text-ink-2">{t("Available times")} · {fmt.date(date, { weekday: "long", day: "numeric", month: "long" })}</h3>{loading && <Spinner size={16} />}</div>
               {slotsErr && <Notice tone="bad">{slotsErr}</Notice>}
               {slots?.closed && <Notice tone="warn" title={t("Closed")}>{slots.closedLabel ?? t("We are closed on this date — please pick another day.")}</Notice>}
-              {slots && !slots.closed && !anyAvail && <Notice tone="warn" title={t("No tables available")}>{t("Nothing is available for this party size on this date. Try another date or area.")}{r.waitlistOpen && <> <Link className="underline font-medium" href={`/waitlist/${r.slug}`}>{t("Join the waitlist")}</Link></>}</Notice>}
+              {slots && !slots.closed && !anyAvail && slots.slots.some((x) => x.reason === "needs_grouping") && <Notice tone="warn" title={t("Tables need to be put together")}>{t("Your party is larger than our biggest table. Tick “Accept that several tables are put together” to see the available times.")}</Notice>}
+              {slots && !slots.closed && !anyAvail && !slots.slots.some((x) => x.reason === "needs_grouping") && <Notice tone="warn" title={t("No tables available")}>{t("Nothing is available for this party size on this date. Try another date or area.")}{r.waitlistOpen && <> <Link className="underline font-medium" href={`/waitlist/${r.slug}`}>{t("Join the waitlist")}</Link></>}</Notice>}
               <div className="space-y-4">
                 {grouped.map(([svc, list]) => (
                   <div key={svc}>{grouped.length > 1 && <p className="text-xs uppercase tracking-wide text-muted mb-1.5">{svc}</p>}
                     <div className="flex flex-wrap gap-2">{list.map((s) => (
-                      <button key={s.time} type="button" disabled={!s.available} onClick={() => pick(s)} aria-pressed={time === s.time} title={s.available ? "" : t(REASON[s.reason ?? "full"] ?? "Unavailable")}
+                      <button key={s.time} type="button" disabled={!s.available} onClick={() => pick(s)} aria-pressed={time === s.time} title={s.available ? "" : s.reason === "needs_grouping" ? t("Tick the box above to accept that tables are put together") : t(REASON[s.reason ?? "full"] ?? "Unavailable")}
                         className={cx("h-11 min-w-[4.5rem] px-3 rounded-xl border text-[15px] font-medium tabular transition", time === s.time ? "text-white border-transparent" : s.available ? "bg-surface border-line-strong hover:border-[var(--brand)]" : "bg-sunken text-muted/50 border-transparent line-through cursor-not-allowed")}
                         style={time === s.time ? { background: "var(--brand)" } : undefined}>{s.time}</button>))}</div></div>))}
               </div>

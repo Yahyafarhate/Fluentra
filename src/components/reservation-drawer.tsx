@@ -22,6 +22,8 @@ export function ReservationDrawer({ id, onClose, onChanged, onEdit }: { id: stri
   const [reason, setReason] = useState(""); const [spend, setSpend] = useState("");
   const [freeTables, setFreeTables] = useState<Array<{ id: string; name: string; capacity: number; displayStatus: string }>>([]);
   const [pick, setPick] = useState("");
+  const [assign, setAssign] = useState<{ partySize: number; suggested: string[]; tables: Array<{ id: string; name: string; capacity: number }> }>({ partySize: 0, suggested: [], tables: [] });
+  const [picks, setPicks] = useState<string[]>([]);
   const operate = can("reservations.operate");
 
   useEffect(() => { setDlg(null); setReason(""); setSpend(""); }, [id]);
@@ -52,9 +54,8 @@ export function ReservationDrawer({ id, onClose, onChanged, onEdit }: { id: stri
         setFreeTables(mv.tables.map((x: { id: string; name: string; capacity: number }) => ({ ...x, displayStatus: "available" })));
         setPick(""); setDlg("table"); return;
       }
-      const st = await api.get(`/api/v1/floor/state?locationId=${r.locationId}`);
-      setFreeTables(st.tables.filter((x: { capacity: number; displayStatus: string }) => x.capacity >= r.partySize && (x.displayStatus === "available" || x.displayStatus === "reserved")));
-      setPick(""); setDlg("table");
+      const a = await api.get(`/api/v1/reservations/${id}/assignable-tables`);
+      setAssign(a); setPicks(a.current.length ? a.current : a.suggested); setDlg("table");
     } catch (e) { toast.error(e); }
   }
 
@@ -103,6 +104,7 @@ export function ReservationDrawer({ id, onClose, onChanged, onEdit }: { id: stri
               {r.depositAmount > 0 && <><dt className="text-muted">{t("Deposit")}</dt><dd className="flex items-center gap-2">{fmt.money(r.depositAmount)} <Badge tone={r.depositStatus === "paid" ? "ok" : r.depositStatus === "pending" ? "warn" : "neutral"}>{t(r.depositStatus)}</Badge></dd></>}
             </dl>
 
+            {status === "pending" && r.groupingAccepted && <Notice tone="warn" title={t("Table grouping to validate")}>{t("This party is bigger than any single table. The guest accepted that tables are put together: check the proposed tables (or choose others with “change”), then confirm.")}</Notice>}
             {r.specialRequests && <Notice tone="gold" title={t("Special requests")}>{r.specialRequests}</Notice>}
             {r.internalNotes && <div className="rounded-xl border border-line p-3 text-sm"><p className="text-xs font-semibold uppercase tracking-wide text-muted mb-1 flex items-center gap-1.5"><Icon name="lock" size={13} />{t("Internal notes")}</p>{r.internalNotes}</div>}
 
@@ -163,14 +165,31 @@ export function ReservationDrawer({ id, onClose, onChanged, onEdit }: { id: stri
         footer={status === "seated"
           ? <><Button onClick={() => setDlg(null)}>{t("Cancel")}</Button><Button variant="gold" disabled={!pick} loading={busy === "move_table"} onClick={() => run("move_table", { tableIds: [pick] }, t("Guests moved — the old table is awaiting cleaning"))}>{t("Move guests")}</Button></>
           : <><Button onClick={() => setDlg(null)}>{t("Cancel")}</Button>
-            <Button variant="primary" disabled={!pick} loading={busy === "seat"} onClick={async () => {
-              try { await api.patch(`/api/v1/reservations/${id}`, { tableIds: [pick] }); toast.success(t("Table assigned")); setDlg(null); reload(); onChanged(); } catch (e) { toast.error(e); }
+            <Button variant="primary" disabled={!picks.length} loading={busy === "seat"} onClick={async () => {
+              try { await api.patch(`/api/v1/reservations/${id}`, { tableIds: picks }); toast.success(t("Table assigned")); setDlg(null); reload(); onChanged(); } catch (e) { toast.error(e); }
             }}>{t("Assign table")}</Button>
-            {operate && <Button variant="gold" disabled={!pick} loading={busy === "seat"} onClick={() => run("seat", { tableIds: [pick] }, t("Guests seated"))}>{t("Assign & seat")}</Button>}</>}>
+            {operate && <Button variant="gold" disabled={!picks.length} loading={busy === "seat"} onClick={() => run("seat", { tableIds: picks }, t("Guests seated"))}>{t("Assign & seat")}</Button>}</>}>
         {status === "seated" && <p className="text-sm text-ink-2 mb-3">{t("The guests keep their reservation. The table they leave goes to “awaiting cleaning”, the new one becomes occupied.")}</p>}
-        {freeTables.length === 0 ? <p className="text-sm text-muted">{t("No suitable table is free right now.")}</p> : (
-          <Select value={pick} onChange={(e) => setPick(e.target.value)} aria-label={t("Table")}><option value="">{t("Select…")}</option>{freeTables.map((x) => <option key={x.id} value={x.id}>{x.name} · {x.capacity} {t("seats")} · {t(x.displayStatus)}</option>)}</Select>
-        )}
+        {status === "seated"
+          ? (freeTables.length === 0 ? <p className="text-sm text-muted">{t("No suitable table is free right now.")}</p> : (
+            <Select value={pick} onChange={(e) => setPick(e.target.value)} aria-label={t("Table")}><option value="">{t("Select…")}</option>{freeTables.map((x) => <option key={x.id} value={x.id}>{x.name} · {x.capacity} {t("seats")}</option>)}</Select>
+          ))
+          : assign.tables.length === 0 ? <p className="text-sm text-muted">{t("No suitable table is free right now.")}</p> : (() => {
+            const seats = assign.tables.filter((x) => picks.includes(x.id)).reduce((n, x) => n + x.capacity, 0);
+            return <div className="space-y-3">
+              <p className="text-sm text-ink-2">{t("Pick one table, or several to put them together.")}</p>
+              <div className="max-h-64 overflow-y-auto space-y-1.5" role="group" aria-label={t("Tables")}>
+                {assign.tables.map((x) => <label key={x.id} className="flex items-center gap-2 rounded-lg border border-line px-3 py-2 text-sm cursor-pointer">
+                  <input type="checkbox" checked={picks.includes(x.id)} onChange={(e) => setPicks(e.target.checked ? [...picks, x.id] : picks.filter((i) => i !== x.id))} />
+                  <span className="flex-1 font-medium">{x.name}</span><span className="text-muted">{x.capacity} {t("seats")}</span>
+                </label>)}
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <span className={seats >= assign.partySize ? "text-ok font-medium" : "text-warn font-medium"}>{seats} / {assign.partySize} {t("seats")}</span>
+                {assign.suggested.length > 0 && <button type="button" className="text-xs text-gold-strong underline" onClick={() => setPicks(assign.suggested)}>{t("Suggest the closest tables")}</button>}
+              </div>
+            </div>;
+          })()}
       </Dialog>
     </>
   );

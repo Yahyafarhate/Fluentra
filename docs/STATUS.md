@@ -7,6 +7,7 @@
 - Auth: signup, login, lockout, reset, invites, DB rate limiting, CSRF origin check
 - Availability engine and transactional booking with advisory lock + GiST exclusion; concurrency tests
 - Reservation lifecycle, walk-ins, early seating, moving a seated party to another table (old table → awaiting cleaning), table conflicts, audit log
+- Table grouping for parties bigger than the largest table: nearest free tables on the same floor (fewest wasted seats), guest opt-in on the booking page, online bookings stay pending until staff validate, validator can pick any tables by hand (tested; the distance uses floor-plan positions, there is no adjacency/walls model)
 - Floor plan editor, live floor, timeline, sections, table combinations
 - Waitlist with public join/status pages and promotion to reservation
 - CRM: profiles, tags, notes, consent ledger, search, merge, GDPR-style export/erase

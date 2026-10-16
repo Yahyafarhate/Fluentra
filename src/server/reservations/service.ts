@@ -9,7 +9,7 @@ import { isDateStr, isTimeStr, timeToMin } from "@/lib/time";
 import { utcToLocal } from "@/lib/tz";
 import { randomToken, sha256, shortCode } from "@/lib/ids";
 import { evaluateStart, loadDay, loadLocation, lockLocation, windowFor, type DayData, type LocationRow } from "../availability/service";
-import { pickTables, validateManualAssignment } from "../availability/engine";
+import { isFree, pickTables, validateManualAssignment } from "../availability/engine";
 import { resolveCustomer } from "../customers/service";
 import { dispatchEvent } from "../automation/service";
 import { manageToken, verifyManageToken } from "../notifications/service";
@@ -41,6 +41,8 @@ export const bookingInputSchema = z.object({
   consent: z.object({ email: z.boolean().optional(), sms: z.boolean().optional(), whatsapp: z.boolean().optional() }).optional(),
   allowDuplicate: z.boolean().optional(),
   force: z.boolean().optional(),
+  /** guest agrees that several tables are put together for a party bigger than any single table */
+  groupingAccepted: z.boolean().optional(),
 });
 export type BookingInput = z.infer<typeof bookingInputSchema>;
 
@@ -84,6 +86,7 @@ const RULE_REASON_MSG: Record<string, [string, string]> = {
   pacing: ["PACING_LIMIT", "That time slot is fully booked (cover limit reached)"],
   service_cap: ["SERVICE_CAP", "This service is fully booked"],
   full: ["NO_AVAILABILITY", "No table is available for that party size and time"],
+  needs_grouping: ["GROUPING_REQUIRED", "This party needs several tables put together — please accept the table grouping to book"],
 };
 
 /**
@@ -109,7 +112,7 @@ export async function createReservationTx(db: Db, input: BookingInput, o: Bookin
   if (!w && !force) throw unprocessable(RULE_REASON_MSG.closed[1], "CLOSED");
   if (channel === "online" && w && (startMin - w.startMin) % w.intervalMin !== 0) throw unprocessable("That start time is not offered", "INVALID_SLOT");
 
-  const slot = evaluateStart(day, input.date, startMin, w, { channel, partySize: input.partySize, now, sectionId: input.sectionId });
+  const slot = evaluateStart(day, input.date, startMin, w, { channel, partySize: input.partySize, now, sectionId: input.sectionId, groupingAccepted: !!input.groupingAccepted });
   // walk-ins occupy the table from this very moment (not from a rounded slot time)
   const start = o.seatNow ? now : new Date(slot.startAt);
   const end = o.seatNow ? new Date(now.getTime() + slot.durationMin * 60_000) : new Date(slot.endAt);
@@ -118,18 +121,18 @@ export async function createReservationTx(db: Db, input: BookingInput, o: Bookin
   let tableIds: string[] | null = null;
   if (o.seatNow && !input.tableIds?.length) {
     // walk-ins sit at a table that is physically ready right now
-    tableIds = pickTables({ tables: day.tables.filter((t) => t.status === "available"), combos: day.combos, busy: day.busy, start: start.getTime(), end: tableEnd.getTime(), party: input.partySize });
+    tableIds = pickTables({ tables: day.tables.filter((t) => t.status === "available"), combos: day.combos, busy: day.busy, start: start.getTime(), end: tableEnd.getTime(), party: input.partySize, allowGrouping: true });
     if (!tableIds) throw conflict(RULE_REASON_MSG.full[1], "NO_AVAILABILITY");
   } else if (input.tableIds?.length) {
     if (o.actor.kind !== "staff") throw forbidden("Guests cannot choose tables", "FORBIDDEN");
-    const err = validateManualAssignment({ tables: day.tables, combos: day.combos, busy: day.busy, tableIds: input.tableIds, start: start.getTime(), end: tableEnd.getTime(), party: input.partySize });
+    const err = validateManualAssignment({ tables: day.tables, combos: day.combos, busy: day.busy, tableIds: input.tableIds, start: start.getTime(), end: tableEnd.getTime(), party: input.partySize, adhoc: true });
     if (err) throw conflict(`Cannot assign the selected table(s): ${err}`, err);
     tableIds = input.tableIds;
     if (!slot.available && slot.reason !== "full" && !force) { const [c, m] = RULE_REASON_MSG[slot.reason ?? "full"]; throw unprocessable(m, c); }
   } else if (slot.available) {
     tableIds = slot.tableIds!;
-  } else if (force && slot.reason !== "full") {
-    tableIds = pickTables({ tables: day.tables, combos: day.combos, busy: day.busy, start: start.getTime(), end: tableEnd.getTime(), party: input.partySize });
+  } else if (force && slot.reason !== "full" && slot.reason !== "needs_grouping") {
+    tableIds = pickTables({ tables: day.tables, combos: day.combos, busy: day.busy, start: start.getTime(), end: tableEnd.getTime(), party: input.partySize, allowGrouping: true });
     if (!tableIds) throw conflict(RULE_REASON_MSG.full[1], "NO_AVAILABILITY");
   } else {
     const [c, m] = RULE_REASON_MSG[slot.reason ?? "full"];
@@ -163,7 +166,9 @@ export async function createReservationTx(db: Db, input: BookingInput, o: Bookin
 
   const dep = depositFor(loc, input.partySize, input.source);
   let status: Status = input.status ?? "confirmed";
-  if (channel === "online") status = loc.autoConfirm && !dep.needed ? "confirmed" : "pending";
+  // a grouped booking (several tables put together) always needs a person to validate it
+  const needsGroupValidation = channel === "online" && !!slot.grouped && !!slot.available && !input.tableIds?.length;
+  if (channel === "online") status = loc.autoConfirm && !dep.needed && !needsGroupValidation ? "confirmed" : "pending";
   if (o.seatNow) status = "confirmed";
   const code = await generateCode(db);
 
@@ -171,12 +176,12 @@ export async function createReservationTx(db: Db, input: BookingInput, o: Bookin
   try {
     r = await db.one<{ id: string }>(
       `INSERT INTO reservations (org_id, location_id, customer_id, code, guest_name, guest_phone, guest_email, party_size, service_date, start_at, end_at, service_id,
-          status, source, occasion, special_requests, internal_notes, seating_preference, is_vip, is_private_event, language, deposit_status, deposit_amount, campaign_id, offer_id, created_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26) RETURNING id`,
+          status, source, occasion, special_requests, internal_notes, seating_preference, is_vip, is_private_event, language, deposit_status, deposit_amount, campaign_id, offer_id, created_by, grouping_accepted)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27) RETURNING id`,
       [o.orgId, loc.id, customerId, code, input.guestName.trim(), phone, email, input.partySize, input.date, start, end, w?.serviceId ?? null, status, input.source,
         nullIfEmpty(input.occasion), nullIfEmpty(input.specialRequests), nullIfEmpty(input.internalNotes), nullIfEmpty(input.seatingPreference),
         input.isVip ?? cust?.vip ?? false, input.isPrivateEvent ?? false, input.language ?? null, dep.needed ? "pending" : "none", dep.amount,
-        o.campaignId ?? null, o.offerId ?? null, o.actor.kind === "staff" ? o.actor.ctx.user.id : null]);
+        o.campaignId ?? null, o.offerId ?? null, o.actor.kind === "staff" ? o.actor.ctx.user.id : null, needsGroupValidation]);
     for (const tid of tableIds!) {
       await db.exec(`INSERT INTO reservation_tables (reservation_id, table_id, org_id, location_id, during) VALUES ($1,$2,$3,$4,$5::tstzrange)`,
         [r.id, tid, o.orgId, loc.id, rangeSql(start, tableEnd)]);
@@ -238,7 +243,7 @@ export async function listReservations(db: Db, ctx: Ctx, f: z.infer<typeof listF
   }
   const rows = await db.query(
     `SELECT r.id, r.code, r.location_id, l.name AS location_name, l.timezone, r.customer_id, r.guest_name, r.guest_phone, r.guest_email, r.party_size, r.service_date,
-            r.start_at, r.end_at, to_char(r.start_at AT TIME ZONE l.timezone,'HH24:MI') AS time, to_char(r.end_at AT TIME ZONE l.timezone,'HH24:MI') AS end_time, r.status, r.source, r.occasion, r.special_requests, r.internal_notes, r.seating_preference, r.is_vip, r.is_private_event,
+            r.start_at, r.end_at, to_char(r.start_at AT TIME ZONE l.timezone,'HH24:MI') AS time, to_char(r.end_at AT TIME ZONE l.timezone,'HH24:MI') AS end_time, r.status, r.source, r.occasion, r.special_requests, r.internal_notes, r.seating_preference, r.is_vip, r.is_private_event, r.grouping_accepted,
             r.deposit_status, r.deposit_amount, r.arrived_at, r.seated_at, r.completed_at,
             COALESCE((SELECT json_agg(json_build_object('id', t.id, 'name', t.name) ORDER BY t.name) FROM reservation_tables rt JOIN tables t ON t.id=rt.table_id WHERE rt.reservation_id=r.id), '[]'::json) AS tables,
             c.allergies, c.dietary, c.vip AS customer_vip,
@@ -295,7 +300,7 @@ export type UpdateInput = z.infer<typeof updateSchema>;
 
 interface ResRow {
   id: string; orgId: string; locationId: string; status: Status; partySize: number; startAt: Date; endAt: Date; serviceDate: string;
-  customerId: string | null; guestPhone: string | null; guestEmail: string | null; updatedAt: Date; startLocal: string;
+  customerId: string | null; guestPhone: string | null; guestEmail: string | null; updatedAt: Date; startLocal: string; groupingAccepted: boolean;
 }
 
 async function lockReservation(db: Db, orgId: string, id: string): Promise<ResRow> {
@@ -312,23 +317,23 @@ async function reallocate(db: Db, loc: LocationRow, r: ResRow, change: { date: s
   const w = windowFor(day, startMin);
   if (!w && !change.force) throw unprocessable(RULE_REASON_MSG.closed[1], "CLOSED");
   if (change.channel === "online" && w && (startMin - w.startMin) % w.intervalMin !== 0) throw unprocessable("That start time is not offered", "INVALID_SLOT");
-  const slot = evaluateStart(day, change.date, startMin, w, { channel: change.channel, partySize: change.partySize, now: change.now });
+  const slot = evaluateStart(day, change.date, startMin, w, { channel: change.channel, partySize: change.partySize, now: change.now, groupingAccepted: change.channel === "staff" });
   const start = new Date(slot.startAt);
   const end = new Date(slot.endAt);
   const tableEnd = new Date(end.getTime() + loc.bufferMin * 60_000);
-  const hardFail = !slot.available && slot.reason !== "full" && !change.force;
+  const hardFail = !slot.available && slot.reason !== "full" && slot.reason !== "needs_grouping" && !change.force;
   if (hardFail) { const [c, m] = RULE_REASON_MSG[slot.reason ?? "full"]; throw unprocessable(m, c); }
 
   let tableIds: string[] | null = null;
   if (change.tableIds?.length) {
-    const err = validateManualAssignment({ tables: day.tables, combos: day.combos, busy: day.busy, tableIds: change.tableIds, start: start.getTime(), end: tableEnd.getTime(), party: change.partySize });
+    const err = validateManualAssignment({ tables: day.tables, combos: day.combos, busy: day.busy, tableIds: change.tableIds, start: start.getTime(), end: tableEnd.getTime(), party: change.partySize, adhoc: true });
     if (err) throw conflict(`Cannot assign the selected table(s): ${err}`, err);
     tableIds = change.tableIds;
   } else {
     // prefer keeping the current tables when they still fit
     const cur = (await db.query<{ tableId: string }>(`SELECT table_id FROM reservation_tables WHERE reservation_id=$1`, [r.id])).map((x) => x.tableId);
     if (cur.length && !validateManualAssignment({ tables: day.tables, combos: day.combos, busy: day.busy, tableIds: cur, start: start.getTime(), end: tableEnd.getTime(), party: change.partySize })) tableIds = cur;
-    else tableIds = pickTables({ tables: day.tables, combos: day.combos, busy: day.busy, start: start.getTime(), end: tableEnd.getTime(), party: change.partySize, onlineOnly: change.channel === "online" });
+    else tableIds = pickTables({ tables: day.tables, combos: day.combos, busy: day.busy, start: start.getTime(), end: tableEnd.getTime(), party: change.partySize, onlineOnly: change.channel === "online", allowGrouping: change.channel === "staff" });
   }
   if (!tableIds) throw conflict(RULE_REASON_MSG.full[1], "NO_AVAILABILITY");
   await db.exec(`DELETE FROM reservation_tables WHERE reservation_id=$1`, [r.id]);
@@ -447,7 +452,7 @@ export async function transitionReservationTx(db: Db, orgId: string, id: string,
       if (input.tableIds?.length) {
         const day = await loadDay(db, loc, r.serviceDate, { excludeReservationId: id, now });
         const end = new Date(r.endAt.getTime() + loc.bufferMin * 60_000);
-        const err = validateManualAssignment({ tables: day.tables, combos: day.combos, busy: day.busy, tableIds: input.tableIds, start: Math.min(r.startAt.getTime(), now.getTime()), end: end.getTime(), party: r.partySize });
+        const err = validateManualAssignment({ tables: day.tables, combos: day.combos, busy: day.busy, tableIds: input.tableIds, start: Math.min(r.startAt.getTime(), now.getTime()), end: end.getTime(), party: r.partySize, adhoc: true });
         if (err) throw conflict(`Cannot seat at the selected table(s): ${err}`, err);
         await db.exec(`DELETE FROM reservation_tables WHERE reservation_id=$1`, [id]);
         try {
@@ -491,7 +496,7 @@ export async function transitionReservationTx(db: Db, orgId: string, id: string,
       const removed = before.filter((t) => !newIds.has(t.id));
       const endMs = Math.max(r.endAt.getTime() + loc.bufferMin * 60_000, now.getTime() + 15 * 60_000);
       const day = await loadDay(db, loc, r.serviceDate, { excludeReservationId: id, now });
-      const err = validateManualAssignment({ tables: day.tables, combos: day.combos, busy: day.busy, tableIds: input.tableIds, start: now.getTime(), end: endMs, party: r.partySize });
+      const err = validateManualAssignment({ tables: day.tables, combos: day.combos, busy: day.busy, tableIds: input.tableIds, start: now.getTime(), end: endMs, party: r.partySize, adhoc: true });
       if (err) throw conflict(`Cannot move to the selected table(s): ${err}`, err);
       // physical state of the tables being added
       const target = added.length ? await db.query<{ id: string; name: string; status: string }>(`SELECT id, name, status FROM tables WHERE id = ANY($1::uuid[]) AND location_id=$2 FOR UPDATE`, [added, r.locationId]) : [];
@@ -552,6 +557,26 @@ export async function transitionReservationTx(db: Db, orgId: string, id: string,
   else await audit(db, null, `reservation.${a}`, "reservation", id, { from: r.status, to, by: "guest" }, { orgId });
   await notifyChange(db, orgId, r.locationId, "reservation");
   return { id, status: to };
+}
+
+/** Tables a validator can pick for a not-yet-seated reservation (free for its whole stay), with the closest group the engine would suggest. */
+export async function listAssignableTables(ctx: Ctx, id: string) {
+  return withOrg(ctx.orgId, async (db) => {
+    const r = await lockReservation(db, ctx.orgId, id);
+    assertLocationAccess(ctx, r.locationId);
+    if (!["pending", "confirmed", "arrived"].includes(r.status)) throw conflict("Tables can only be chosen before the party is seated", "INVALID_STATE");
+    const loc = await loadLocation(db, r.locationId);
+    const now = new Date();
+    const day = await loadDay(db, loc, r.serviceDate, { excludeReservationId: id, now });
+    const start = r.startAt.getTime(), end = r.endAt.getTime() + loc.bufferMin * 60_000;
+    const free = day.tables.filter((t) => t.status !== "blocked" && isFree(t.id, start, end, day.busy));
+    const current = (await db.query<{ tableId: string }>(`SELECT table_id FROM reservation_tables WHERE reservation_id=$1`, [id])).map((x) => x.tableId);
+    const suggested = pickTables({ tables: day.tables, combos: day.combos, busy: day.busy, start, end, party: r.partySize, allowGrouping: true }) ?? [];
+    return {
+      partySize: r.partySize, current, suggested, groupingAccepted: r.groupingAccepted,
+      tables: free.map((t) => ({ id: t.id, name: t.name, capacity: t.capacity, floorId: t.floorId })).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true })),
+    };
+  });
 }
 
 /** Tables a seated party can move to right now: physically available, big enough, and free until the end of the party's stay. */
@@ -686,7 +711,7 @@ export async function guestModify(token: string, input: z.infer<typeof guestModi
 }
 
 // ───────────────────────────── Public holds ─────────────────────────────
-export async function createHold(orgId: string, input: { locationId: string; date: string; time: string; partySize: number; sectionId?: string | null }) {
+export async function createHold(orgId: string, input: { locationId: string; date: string; time: string; partySize: number; sectionId?: string | null; groupingAccepted?: boolean }) {
   return withOrg(orgId, async (db) => {
     const loc = await loadLocation(db, input.locationId);
     if (!loc.onlineBookingEnabled) throw forbidden("Online booking is not available", "ONLINE_BOOKING_DISABLED");
@@ -696,7 +721,7 @@ export async function createHold(orgId: string, input: { locationId: string; dat
     const startMin = timeToMin(input.time);
     const w = windowFor(day, startMin);
     if (!w || (startMin - w.startMin) % w.intervalMin !== 0) throw unprocessable("That start time is not offered", "INVALID_SLOT");
-    const slot = evaluateStart(day, input.date, startMin, w, { channel: "online", partySize: input.partySize, now, sectionId: input.sectionId });
+    const slot = evaluateStart(day, input.date, startMin, w, { channel: "online", partySize: input.partySize, now, sectionId: input.sectionId, groupingAccepted: !!input.groupingAccepted });
     if (!slot.available) { const [c, m] = RULE_REASON_MSG[slot.reason ?? "full"]; throw conflict(m, c); }
     const token = randomToken(24);
     const start = new Date(slot.startAt), end = new Date(new Date(slot.endAt).getTime() + loc.bufferMin * 60_000);

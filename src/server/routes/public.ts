@@ -23,11 +23,11 @@ publicRouter.add("GET", "/restaurants/:slug/slots", "public", "Available time sl
 
 publicRouter.add("POST", "/restaurants/:slug/holds", "public", "Temporarily hold a slot while the guest fills in details", publicRoute({ rate: { key: "pub-hold", limit: 20, windowSec: 600 } }, async (a) => {
   const ref = await resolvePublicLocation(slug.parse(a.params.slug));
-  const b = await a.body(z.object({ date: z.string().refine(isDateStr), time: z.string().refine(isTimeStr), partySize: z.number().int().min(1).max(100), sectionId: z.string().uuid().optional() }));
+  const b = await a.body(z.object({ date: z.string().refine(isDateStr), time: z.string().refine(isTimeStr), partySize: z.number().int().min(1).max(100), sectionId: z.string().uuid().optional(), groupingAccepted: z.boolean().optional() }));
   return json(await createHold(ref.orgId, { locationId: ref.id, ...b }), 201);
 }));
 
-const publicBookingSchema = bookingInputSchema.pick({ date: true, time: true, partySize: true, guestName: true, guestPhone: true, guestEmail: true, occasion: true, specialRequests: true, language: true, seatingPreference: true, sectionId: true }).extend({
+const publicBookingSchema = bookingInputSchema.pick({ date: true, time: true, partySize: true, guestName: true, guestPhone: true, guestEmail: true, occasion: true, specialRequests: true, language: true, seatingPreference: true, sectionId: true, groupingAccepted: true }).extend({
   consent: z.object({ email: z.boolean().optional(), sms: z.boolean().optional(), whatsapp: z.boolean().optional() }).optional(),
   holdToken: z.string().max(100).optional(),
   campaignId: z.string().uuid().optional(),
