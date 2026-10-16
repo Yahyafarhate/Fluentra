@@ -118,7 +118,7 @@ export function Checkbox({ checked, onChange, label }: { checked: boolean; onCha
 
 export function Segmented<T extends string>({ value, onChange, options, className }: { value: T; onChange: (v: T) => void; options: Array<{ value: T; label: ReactNode }>; className?: string }) {
   return (
-    <div role="tablist" className={cx("inline-flex rounded-lg bg-sunken p-0.5 text-sm", className)}>
+    <div role="tablist" className={cx("inline-flex max-w-full overflow-x-auto scroll-thin rounded-lg bg-sunken p-0.5 text-sm", className)}>
       {options.map((o) => (
         <button key={o.value} role="tab" aria-selected={value === o.value} type="button" onClick={() => onChange(o.value)} className={cx("px-3 h-8 rounded-md font-medium transition whitespace-nowrap", value === o.value ? "bg-surface shadow-sm text-ink" : "text-muted hover:text-ink")}>{o.label}</button>
       ))}
