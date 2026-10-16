@@ -13,7 +13,7 @@ import type { Permission } from "@/lib/rbac";
 import { bookingInputSchema, calendarCounts, createReservation, getReservation, listFilterSchema, listAssignableTables, listMoveTargets, listReservations, seatWalkIn, transitionReservation, transitionSchema, updateReservation, updateSchema, walkInSchema } from "../reservations/service";
 import { computeSlots, loadLocation } from "../availability/service";
 import {
-  comboSchema, createCombination, createFloor, createSection, createTable, deleteCombination, deleteFloor, deleteSection, deleteTable, floorSchema, getFloorState, getTimeline,
+  comboSchema, createCombination, createItem, deleteItem, itemInputSchema, itemPatchSchema, updateItem, createFloor, createSection, createTable, deleteCombination, deleteFloor, deleteSection, deleteTable, floorSchema, getFloorState, getTimeline,
   layoutSchema, saveLayout, sectionSchema, setTableStatus, tableInputSchema, tablePatchSchema, tableStatusSchema, timelineQuery, updateFloor, updateTable,
 } from "../floor/service";
 import { addToWaitlist, estimateWait, listWaitlist, waitlistActionSchema, waitlistAction, waitlistInputSchema, waitlistStats } from "../waitlist/service";
@@ -188,6 +188,13 @@ def("PATCH", "/floor/floors/:id", "floor.manage", "Rename / resize a floor", asy
   return { ok: true };
 });
 def("DELETE", "/floor/floors/:id", "floor.manage", "Delete an empty floor", async (a) => { await withOrg(a.ctx.orgId, (db) => deleteFloor(db, a.ctx, a.params.id)); return { ok: true }; });
+def("POST", "/floor/items", "floor.manage", "Add a decor item (pool, wall, door, bar…)", async (a) => json(await withOrg(a.ctx.orgId, async (db) => createItem(db, a.ctx, await a.body(itemInputSchema))), 201));
+def("PATCH", "/floor/items/:id", "floor.manage", "Move / resize / relabel a decor item", async (a) => {
+  const patch = await a.body(itemPatchSchema);
+  await withOrg(a.ctx.orgId, (db) => updateItem(db, a.ctx, a.params.id, patch));
+  return { ok: true };
+});
+def("DELETE", "/floor/items/:id", "floor.manage", "Delete a decor item", async (a) => { await withOrg(a.ctx.orgId, (db) => deleteItem(db, a.ctx, a.params.id)); return { ok: true }; });
 def("POST", "/floor/sections", "floor.manage", "Create a dining section", async (a) => json(await withOrg(a.ctx.orgId, async (db) => createSection(db, a.ctx, await a.body(sectionSchema))), 201));
 def("DELETE", "/floor/sections/:id", "floor.manage", "Delete a dining section", async (a) => { await withOrg(a.ctx.orgId, (db) => deleteSection(db, a.ctx, a.params.id)); return { ok: true }; });
 def("POST", "/floor/combinations", "floor.manage", "Define a compatible table combination", async (a) => json(await withOrg(a.ctx.orgId, async (db) => createCombination(db, a.ctx, await a.body(comboSchema))), 201));

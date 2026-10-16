@@ -28,7 +28,7 @@ export type TableInput = z.infer<typeof tableInputSchema>;
 
 async function locOf(db: Db, ctx: Ctx, id: string, table: string): Promise<string> {
   const r = await db.maybe<{ locationId: string }>(`SELECT location_id FROM ${table} WHERE id=$1 AND org_id=$2`, [id, ctx.orgId]);
-  if (!r) throw notFound(table === "tables" ? "Table" : table === "floors" ? "Floor" : "Record");
+  if (!r) throw notFound(table === "tables" ? "Table" : table === "floors" ? "Floor" : table === "floor_items" ? "Decor item" : "Record");
   assertLocationAccess(ctx, r.locationId);
   return r.locationId;
 }
@@ -120,6 +120,45 @@ export async function setTableStatus(db: Db, ctx: Ctx, id: string, input: z.infe
   await notifyChange(db, ctx.orgId, locationId, "floor");
 }
 
+// ── decor (pool, walls, doors…) ──
+export const ITEM_KINDS = ["pool", "basin", "wall", "door", "bar", "stage", "plant", "stairs", "label"] as const;
+export const itemInputSchema = z.object({
+  locationId: z.string().uuid(),
+  floorId: z.string().uuid(),
+  kind: z.enum(ITEM_KINDS),
+  label: z.string().trim().max(40).nullable().optional(),
+  x: z.number().int().min(0).max(5000).default(20),
+  y: z.number().int().min(0).max(5000).default(20),
+  w: z.number().int().min(6).max(3000).default(120),
+  h: z.number().int().min(6).max(3000).default(80),
+  rotation: z.number().int().min(0).max(359).default(0),
+});
+export const itemPatchSchema = itemInputSchema.omit({ locationId: true, floorId: true }).partial();
+export async function createItem(db: Db, ctx: Ctx, input: z.infer<typeof itemInputSchema>) {
+  assertLocationAccess(ctx, input.locationId);
+  await loadLocation(db, input.locationId);
+  await assertFloorAndSection(db, ctx, input.locationId, input.floorId);
+  const row = await db.one<{ id: string }>(
+    `INSERT INTO floor_items (org_id, location_id, floor_id, kind, label, x, y, w, h, rotation) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
+    [ctx.orgId, input.locationId, input.floorId, input.kind, input.label || null, input.x, input.y, input.w, input.h, input.rotation]);
+  await audit(db, ctx, "floor_item.create", "floor_item", row.id, { kind: input.kind });
+  await notifyChange(db, ctx.orgId, input.locationId, "floor");
+  return row;
+}
+export async function updateItem(db: Db, ctx: Ctx, id: string, patch: z.infer<typeof itemPatchSchema>) {
+  const locationId = await locOf(db, ctx, id, "floor_items");
+  await db.exec(`UPDATE floor_items SET kind=COALESCE($2,kind), label=CASE WHEN $3::boolean THEN $4 ELSE label END, x=COALESCE($5,x), y=COALESCE($6,y), w=COALESCE($7,w), h=COALESCE($8,h), rotation=COALESCE($9,rotation) WHERE id=$1`,
+    [id, patch.kind ?? null, patch.label !== undefined, patch.label || null, patch.x ?? null, patch.y ?? null, patch.w ?? null, patch.h ?? null, patch.rotation ?? null]);
+  await audit(db, ctx, "floor_item.update", "floor_item", id);
+  await notifyChange(db, ctx.orgId, locationId, "floor");
+}
+export async function deleteItem(db: Db, ctx: Ctx, id: string) {
+  const locationId = await locOf(db, ctx, id, "floor_items");
+  await db.exec(`DELETE FROM floor_items WHERE id=$1`, [id]);
+  await audit(db, ctx, "floor_item.delete", "floor_item", id);
+  await notifyChange(db, ctx.orgId, locationId, "floor");
+}
+
 // ── floors / sections / combinations ──
 export const floorSchema = z.object({ locationId: z.string().uuid(), name: z.string().trim().min(1).max(60), width: z.number().int().min(400).max(3000).default(1000), height: z.number().int().min(300).max(2000).default(640) });
 export async function createFloor(db: Db, ctx: Ctx, input: z.infer<typeof floorSchema>) {
@@ -204,6 +243,7 @@ export async function getFloorState(db: Db, ctx: Ctx, locationId: string, opts: 
       WHERE rt.location_id=$1 AND r.status IN ('pending','confirmed','arrived','seated') AND ((upper(rt.during) > $2 AND lower(rt.during) < $3) OR r.status = 'seated')
       ORDER BY r.start_at`, [locationId, new Date(at.getTime() - 4 * 3600_000), new Date(at.getTime() + 24 * 3600_000), loc.timezone]);
   const combos = await db.query(`SELECT c.id, c.name, c.capacity, array_agg(ct.table_id) AS table_ids FROM table_combinations c JOIN table_combination_tables ct ON ct.combination_id=c.id WHERE c.org_id=$1 AND c.location_id=$2 AND c.active GROUP BY c.id`, [ctx.orgId, locationId]);
+  const items = await db.query(`SELECT id, floor_id, kind, label, x, y, w, h, rotation FROM floor_items WHERE org_id=$1 AND location_id=$2 ORDER BY created_at`, [ctx.orgId, locationId]);
 
   const out: FloorTable[] = tables.map((t) => {
     const mine = rs.filter((r) => r.tableId === t.id);
@@ -219,7 +259,7 @@ export async function getFloorState(db: Db, ctx: Ctx, locationId: string, opts: 
     const pick = (r: typeof current) => r && { id: r.id, code: r.code, guestName: r.guestName, partySize: r.partySize, startAt: r.startAt, endAt: r.endAt, startLocal: r.startLocal, endLocal: r.endLocal, status: r.status, isVip: r.isVip, seatedAt: r.seatedAt, specialRequests: r.specialRequests };
     return { ...(t as unknown as FloorTable), displayStatus: display, current: pick(current) ?? null, next: pick(arrived ?? upcoming[0] ?? null) ?? null, nextCount: upcoming.length };
   });
-  return { location: { id: loc.id, name: loc.name, timezone: loc.timezone, cleaningWorkflow: loc.cleaningWorkflow }, at, floors, sections, tables: out, combos };
+  return { location: { id: loc.id, name: loc.name, timezone: loc.timezone, cleaningWorkflow: loc.cleaningWorkflow }, at, floors, sections, tables: out, combos, items };
 }
 
 export const timelineQuery = z.object({ locationId: z.string().uuid(), date: z.string().refine(isDateStr) });

@@ -8,6 +8,7 @@ import { useI18n } from "@/lib/i18n/client";
 import { api, ApiError, qs } from "@/lib/client/api";
 import { useApi } from "@/lib/client/hooks";
 import { TableNode, type FloorTable } from "./table-node";
+import { DecorNode, DECOR_KINDS, DEFAULT_SIZE, OBSTACLES, decorName, type DecorKind, type FloorItem } from "./decor-node";
 
 const GRID = 10;
 const snap = (v: number) => Math.round(v / GRID) * GRID;
@@ -18,6 +19,11 @@ export function Editor() {
   const { toast, confirm } = useFeedback();
   const { data, error, loading, reload } = useApi<any>(locationId ? `/api/v1/floor/state${qs({ locationId })}` : null);  
   const [tables, setTables] = useState<FloorTable[]>([]);
+  const [items, setItems] = useState<FloorItem[]>([]);
+  const [selItem, setSelItem] = useState<string | null>(null);
+  const [decorKind, setDecorKind] = useState<DecorKind>("pool");
+  const itemsRef = useRef(items);
+  useEffect(() => { itemsRef.current = items; });
   const [floorId, setFloorId] = useState<string | null>(null);
   const [sel, setSel] = useState<string[]>([]);
   const [dirty, setDirty] = useState<Set<string>>(new Set());
@@ -30,11 +36,14 @@ export function Editor() {
 
   // sync from server only when nothing is pending locally
   useEffect(() => { if (data && dirtyRef.current.size === 0) setTables(data.tables); }, [data]);
+  useEffect(() => { if (data) setItems(data.items ?? []); }, [data]);
   const floors = data?.floors ?? [];
   const floor = floors.find((f: { id: string }) => f.id === floorId) ?? floors[0];
   const onFloor = tables.filter((x) => x.floorId === floor?.id);
   const selTables = tables.filter((x) => sel.includes(x.id));
   const one = selTables.length === 1 ? selTables[0] : null;
+  const itemsOnFloor = items.filter((x) => x.floorId === floor?.id);
+  const oneItem = items.find((x) => x.id === selItem) ?? null;
 
   /* ───── autosave of geometry ───── */
   const flush = useCallback(async () => {
@@ -104,6 +113,47 @@ export function Editor() {
     if (e.key === "Delete" || e.key === "Backspace") { if (sel.length === 1) void removeSelected(); }
   }
 
+  /* ───── decor (saved when a drag or edit ends) ───── */
+  const patchItem = (id: string, p: Partial<FloorItem>) => setItems((cur) => cur.map((x) => (x.id === id ? { ...x, ...p } : x)));
+  async function saveItem(id: string) {
+    const it = itemsRef.current.find((x) => x.id === id); if (!it) return;
+    try { await api.patch(`/api/v1/floor/items/${id}`, { kind: it.kind, label: it.label, x: Math.round(it.x), y: Math.round(it.y), w: Math.round(it.w), h: Math.round(it.h), rotation: Math.round(it.rotation) }); } catch (e) { toast.error(e); reload(); }
+  }
+  function startItemDrag(e: React.PointerEvent, it: FloorItem) {
+    if (e.button !== 0 || !floor || !canvas.current) return;
+    e.preventDefault(); e.stopPropagation();
+    setSelItem(it.id); setSel([]);
+    const scale = floor.width / canvas.current.getBoundingClientRect().width;
+    const sx = e.clientX, sy = e.clientY; let moved = false;
+    const move = (ev: PointerEvent) => {
+      const dx = (ev.clientX - sx) * scale, dy = (ev.clientY - sy) * scale;
+      if (!moved && Math.hypot(dx, dy) < 3) return; moved = true;
+      patchItem(it.id, { x: Math.max(0, Math.min(floor.width - it.w, snap(it.x + dx))), y: Math.max(0, Math.min(floor.height - it.h, snap(it.y + dy))) });
+    };
+    const up = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); if (moved) void saveItem(it.id); };
+    window.addEventListener("pointermove", move); window.addEventListener("pointerup", up);
+  }
+  function startItemResize(e: React.PointerEvent, it: FloorItem) {
+    e.stopPropagation(); e.preventDefault();
+    if (!floor || !canvas.current) return;
+    const scale = floor.width / canvas.current.getBoundingClientRect().width;
+    const sx = e.clientX, sy = e.clientY;
+    const move = (ev: PointerEvent) => patchItem(it.id, { w: Math.max(10, Math.min(3000, snap(it.w + (ev.clientX - sx) * scale))), h: Math.max(10, Math.min(3000, snap(it.h + (ev.clientY - sy) * scale))) });
+    const up = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); void saveItem(it.id); };
+    window.addEventListener("pointermove", move); window.addEventListener("pointerup", up);
+  }
+  async function addItem() {
+    if (!floor || !locationId) return;
+    try {
+      const r = await api.post("/api/v1/floor/items", { locationId, floorId: floor.id, kind: decorKind, x: 60, y: 60, ...DEFAULT_SIZE[decorKind] });
+      await reload(); setSelItem(r.id); setSel([]); toast.success(t("Decor added"));
+    } catch (e) { toast.error(e); }
+  }
+  async function removeItem() {
+    if (!oneItem) return;
+    try { await api.del(`/api/v1/floor/items/${oneItem.id}`); setSelItem(null); await reload(); toast.success(t("Deleted")); } catch (e) { toast.error(e); }
+  }
+
   /* ───── CRUD ───── */
   async function addTable(shape: "rect" | "round" | "square") {
     if (!floor || !locationId) return;
@@ -135,6 +185,9 @@ export function Editor() {
           <Button size="sm" variant="primary" icon="plus" onClick={() => addTable("rect")} disabled={!floor}>{t("Rectangular")}</Button>
           <Button size="sm" onClick={() => addTable("round")} disabled={!floor}>{t("Round")}</Button>
           <Button size="sm" onClick={() => addTable("square")} disabled={!floor}>{t("Square")}</Button>
+          <span className="mx-1 h-6 w-px bg-line" />
+          <Select value={decorKind} onChange={(e) => setDecorKind(e.target.value as DecorKind)} className="!w-auto" aria-label={t("Decor element")}>{DECOR_KINDS.map((k) => <option key={k} value={k}>{decorName(k, t)}</option>)}</Select>
+          <Button size="sm" icon="plus" onClick={addItem} disabled={!floor}>{t("Add decor")}</Button>
           <span className="ms-auto text-xs flex items-center gap-1.5" role="status">
             {saveState === "saved" && <><Icon name="check" size={14} className="text-ok" />{t("All changes saved")}</>}
             {saveState === "saving" && <>{t("Saving…")}</>}
@@ -145,10 +198,15 @@ export function Editor() {
         {!floor ? <Card><EmptyState icon="floor" title={t("Create your first floor")} action={<Button variant="primary" onClick={() => setFloorDlg("new")}>{t("Add floor")}</Button>} /></Card> : (
           <div className="overflow-x-auto scroll-thin rounded-2xl border border-line bg-surface [background-image:linear-gradient(var(--color-sunken)_1px,transparent_1px),linear-gradient(90deg,var(--color-sunken)_1px,transparent_1px)] [background-size:24px_24px]">
             <div ref={canvas} dir="ltr" className="relative min-w-[760px] [container-type:inline-size] outline-none" tabIndex={0} style={{ aspectRatio: `${floor.width} / ${floor.height}` }}
-              onPointerDown={(e) => { if (e.target === e.currentTarget) setSel([]); }} aria-label={t("Floor plan canvas. Drag tables to move them; arrow keys nudge the selected table.")}>
+              onPointerDown={(e) => { if (e.target === e.currentTarget) { setSel([]); setSelItem(null); } }} aria-label={t("Floor plan canvas. Drag tables to move them; arrow keys nudge the selected table.")}>
               {onFloor.length === 0 && <div className="absolute inset-0 grid place-items-center text-sm text-muted pointer-events-none">{t("Add a table to get started")}</div>}
+              {itemsOnFloor.map((i) => (
+                <DecorNode key={i.id} item={i} floor={floor} mode="edit" selected={selItem === i.id} name={decorName(i.kind, t)} onPointerDown={(e) => startItemDrag(e, i)}>
+                  {selItem === i.id && <span onPointerDown={(e) => startItemResize(e, i)} className="absolute bottom-0 end-0 size-3.5 bg-gold rounded-tl-md cursor-nwse-resize" style={{ touchAction: "none" }} aria-label={t("Resize")} />}
+                </DecorNode>
+              ))}
               {onFloor.map((x) => (
-                <TableNode key={x.id} t={x} floor={floor} mode="edit" selected={sel.includes(x.id)} onPointerDown={(e) => startDrag(e, x)}>
+                <TableNode key={x.id} t={x} floor={floor} mode="edit" selected={sel.includes(x.id)} onPointerDown={(e) => { setSelItem(null); startDrag(e, x); }}>
                   {sel.length === 1 && sel[0] === x.id && <span onPointerDown={(e) => startResize(e, x)} className="absolute bottom-0 end-0 size-4 bg-gold rounded-tl-md cursor-nwse-resize" style={{ touchAction: "none" }} aria-label={t("Resize")} />}
                 </TableNode>
               ))}
@@ -159,7 +217,8 @@ export function Editor() {
       </div>
 
       <aside className="space-y-4">
-        {one ? <TableInspector key={one.id} tb={one} sections={data?.sections ?? []} floors={floors} patchLocal={patchLocal} onSaved={reload} onRemove={removeSelected} />
+        {oneItem ? <DecorInspector key={oneItem.id} it={oneItem} patch={(p) => patchItem(oneItem.id, p)} save={() => saveItem(oneItem.id)} onRemove={removeItem} />
+          : one ? <TableInspector key={one.id} tb={one} sections={data?.sections ?? []} floors={floors} patchLocal={patchLocal} onSaved={reload} onRemove={removeSelected} />
           : selTables.length > 1 ? (
             <Card><CardHeader title={t("{n} tables selected", { n: selTables.length })} />
               <p className="text-sm text-ink-2 mb-3">{t("Combine them so they can be booked together for larger parties.")}</p>
@@ -288,3 +347,21 @@ function SectionDialog({ open, onClose, locationId, onDone }: { open: boolean; o
   );
 }
 void useMemo;
+
+function DecorInspector({ it, patch, save, onRemove }: { it: FloorItem; patch: (p: Partial<FloorItem>) => void; save: () => void; onRemove: () => void }) {
+  const { t } = useI18n();
+  return (
+    <Card>
+      <CardHeader title={decorName(it.kind, t)} subtitle={t("Decor does not take reservations.")} />
+      {OBSTACLES.includes(it.kind) && <Notice tone="info">{t("Tables on either side of this element are never grouped together for a large party.")}</Notice>}
+      <div className="grid grid-cols-2 gap-3 mt-3">
+        <Field label={t("Type")} className="col-span-2"><Select value={it.kind} onChange={(e) => { patch({ kind: e.target.value as DecorKind }); setTimeout(save, 0); }}>{DECOR_KINDS.map((k) => <option key={k} value={k}>{decorName(k, t)}</option>)}</Select></Field>
+        <Field label={t("Label")} className="col-span-2"><Input value={it.label ?? ""} maxLength={40} onChange={(e) => patch({ label: e.target.value || null })} onBlur={save} /></Field>
+        <Field label={t("Width")}><Input type="number" min={10} max={3000} step={10} value={it.w} onChange={(e) => patch({ w: Math.max(10, Number(e.target.value)) })} onBlur={save} /></Field>
+        <Field label={t("Height")}><Input type="number" min={10} max={3000} step={10} value={it.h} onChange={(e) => patch({ h: Math.max(10, Number(e.target.value)) })} onBlur={save} /></Field>
+        <Field label={t("Rotation")} className="col-span-2"><Input type="number" min={0} max={359} step={15} value={it.rotation} onChange={(e) => patch({ rotation: ((Number(e.target.value) % 360) + 360) % 360 })} onBlur={save} /></Field>
+      </div>
+      <Button variant="ghost" className="!text-bad mt-4" icon="trash" onClick={onRemove}>{t("Delete")}</Button>
+    </Card>
+  );
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { durationFor, groupTables, largestSingle, pickTables, resolveWindows, slotTimes, validateManualAssignment, type TableLite, type BusyInterval } from "@/server/availability/engine";
+import { durationFor, groupTables, segmentHitsRect, largestSingle, pickTables, resolveWindows, slotTimes, validateManualAssignment, type TableLite, type BusyInterval } from "@/server/availability/engine";
 import { simulateWait } from "@/server/waitlist/service";
 import { canTransition, nextActions } from "@/server/reservations/state";
 
@@ -112,5 +112,26 @@ describe("grouping tables for a party bigger than any single table", () => {
     expect(validateManualAssignment({ tables, combos: [], busy: [], tableIds: ["a", "b"], start: 0, end: H, party: 12 })).toBe("INCOMPATIBLE_TABLES");
     expect(validateManualAssignment({ tables, combos: [], busy: [], tableIds: ["a", "b"], start: 0, end: H, party: 12, adhoc: true })).toBeNull();
     expect(validateManualAssignment({ tables, combos: [], busy: [], tableIds: ["a", "b"], start: 0, end: H, party: 13, adhoc: true })).toBe("INSUFFICIENT_CAPACITY");
+  });
+});
+
+describe("obstacles on the floor plan", () => {
+  const rect = (o: Partial<{ floorId: string; x: number; y: number; w: number; h: number; rotation: number }> = {}) => ({ floorId: "f", x: 0, y: 0, w: 100, h: 10, rotation: 0, ...o });
+  it("detects when a straight line crosses a (rotated) rectangle", () => {
+    expect(segmentHitsRect({ x: 50, y: -20 }, { x: 50, y: 30 }, rect())).toBe(true);
+    expect(segmentHitsRect({ x: 0, y: 40 }, { x: 100, y: 40 }, rect())).toBe(false);
+    expect(segmentHitsRect({ x: 0, y: 5 }, { x: 100, y: 5 }, rect({ rotation: 90 }))).toBe(true);        // now vertical, centred at x=50
+    expect(segmentHitsRect({ x: 0, y: 80 }, { x: 100, y: 80 }, rect({ rotation: 90 }))).toBe(false);
+    expect(segmentHitsRect({ x: 200, y: 5 }, { x: 300, y: 5 }, rect())).toBe(false);                      // stops short
+  });
+  it("never groups tables across a pool or wall, and falls back to a group that stays on one side", () => {
+    const at = (id: string, capacity: number, x: number) => T(id, capacity, { x, y: 0, w: 10, h: 10 });
+    const tables = [at("a", 8, 0), at("b", 4, 100), at("c", 4, 300), at("d", 4, 320)];
+    const wall = rect({ x: 50, y: -50, w: 10, h: 200 });                  // between a and everything else
+    const args = { tables, busy: [] as BusyInterval[], start: 0, end: H, party: 12 };
+    expect(groupTables(args)!.sort()).toEqual(["a", "b"]);
+    expect(groupTables({ ...args, obstacles: [wall] })!.sort()).toEqual(["b", "c", "d"]);
+    expect(groupTables({ ...args, obstacles: [wall], party: 14 })).toBeNull();                         // 8-seater is cut off, the rest hold 12
+    expect(groupTables({ ...args, obstacles: [rect({ floorId: "other", x: 50, y: -50, w: 10, h: 200 })] })!.sort()).toEqual(["a", "b"]); // another floor's wall does not count
   });
 });

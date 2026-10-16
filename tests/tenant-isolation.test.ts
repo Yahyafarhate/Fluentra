@@ -14,7 +14,7 @@ describe("tenant isolation (database + service layer)", () => {
     await createReservation(t.owner, booking(t));
     const r = await getPool().query("SELECT count(*)::int AS n FROM reservations");
     expect(r.rows[0].n).toBe(0);
-    for (const table of ["customers", "locations", "tables", "notifications", "audit_logs", "organizations", "users", "memberships"]) {
+    for (const table of ["customers", "locations", "tables", "floor_items", "notifications", "audit_logs", "organizations", "users", "memberships"]) {
       const x = await getPool().query(`SELECT count(*)::int AS n FROM ${table}`);
       expect(x.rows[0].n, table).toBe(0);
     }
