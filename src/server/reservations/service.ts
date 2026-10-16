@@ -385,6 +385,15 @@ export async function updateReservation(ctx: Ctx, id: string, input: UpdateInput
     await lockLocation(db, cur.locationId);
     const r = await lockReservation(db, ctx.orgId, id);
     const loc = await loadLocation(db, r.locationId);
+    // A seated party's table can only change through the move_table transition, which also updates the physical table states
+    // (old table → cleaning, new table → occupied) and the visit. Editing it as a plain reassignment would leave the old table stuck.
+    if (r.status === "seated" && input.tableIds?.length) {
+      const cur = await tableStates(db, id);
+      const wanted = new Set(input.tableIds);
+      const same = cur.length === wanted.size && cur.every((t) => wanted.has(t.id));
+      if (!same) await transitionReservationTx(db, ctx.orgId, id, { action: "move_table", tableIds: input.tableIds, force: input.force }, { kind: "staff", ctx });
+      input = { ...input, tableIds: undefined };
+    }
     const ch = await applyUpdate(db, loc, r, input, { kind: "staff", ctx }, new Date());
     await audit(db, ctx, "reservation.update", "reservation", id, { fields: Object.keys(input).filter((k) => k !== "force") });
     await notifyChange(db, ctx.orgId, r.locationId, "reservation");
@@ -543,6 +552,24 @@ export async function transitionReservationTx(db: Db, orgId: string, id: string,
   else await audit(db, null, `reservation.${a}`, "reservation", id, { from: r.status, to, by: "guest" }, { orgId });
   await notifyChange(db, orgId, r.locationId, "reservation");
   return { id, status: to };
+}
+
+/** Tables a seated party can move to right now: physically available, big enough, and free until the end of the party's stay. */
+export async function listMoveTargets(ctx: Ctx, id: string) {
+  return withOrg(ctx.orgId, async (db) => {
+    const r = await lockReservation(db, ctx.orgId, id);
+    assertLocationAccess(ctx, r.locationId);
+    if (r.status !== "seated") throw conflict("Only a seated party can be moved", "INVALID_STATE");
+    const loc = await loadLocation(db, r.locationId);
+    const now = new Date();
+    const current = new Set((await db.query<{ id: string }>(`SELECT table_id AS id FROM reservation_tables WHERE reservation_id=$1`, [id])).map((t) => t.id));
+    const endMs = Math.max(r.endAt.getTime() + loc.bufferMin * 60_000, now.getTime() + 15 * 60_000);
+    const day = await loadDay(db, loc, r.serviceDate, { excludeReservationId: id, now });
+    return day.tables
+      .filter((t) => !current.has(t.id) && t.status === "available" && !validateManualAssignment({ tables: day.tables, combos: day.combos, busy: day.busy, tableIds: [t.id], start: now.getTime(), end: endMs, party: r.partySize }))
+      .map((t) => ({ id: t.id, name: t.name, capacity: t.capacity }))
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+  });
 }
 
 export const transitionReservation = (ctx: Ctx, id: string, input: TransitionInput) =>

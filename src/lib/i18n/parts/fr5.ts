@@ -4,4 +4,5 @@ export const fr5: Record<string, string> = {
   "move": "déplacer", "Move to another table": "Déplacer vers une autre table", "Move guests": "Déplacer les clients",
   "Guests moved — the old table is awaiting cleaning": "Clients déplacés — l'ancienne table est à nettoyer",
   "The guests keep their reservation. The table they leave goes to “awaiting cleaning”, the new one becomes occupied.": "Les clients gardent leur réservation. La table qu'ils quittent passe à « à nettoyer », la nouvelle devient occupée.",
+  "This party is seated. To change its table, use “Move” on the reservation.": "Cette réservation est installée. Pour changer sa table, utilisez « déplacer » sur la réservation.",
 };

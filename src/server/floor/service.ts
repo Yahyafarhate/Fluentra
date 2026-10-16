@@ -109,10 +109,14 @@ export const tableStatusSchema = z.object({ status: z.enum(["available", "cleani
 export async function setTableStatus(db: Db, ctx: Ctx, id: string, input: z.infer<typeof tableStatusSchema>) {
   const locationId = await locOf(db, ctx, id, "tables");
   const t = await db.one<{ status: string; name: string }>(`SELECT status, name FROM tables WHERE id=$1 FOR UPDATE`, [id]);
-  if (t.status === "occupied") throw conflict(`Table ${t.name} is occupied by a seated party — complete that visit first`, "TABLE_OCCUPIED");
+  if (t.status === "occupied") {
+    // an "occupied" table with nobody seated on it is a leftover (stale state): staff may reset it
+    const seated = await db.maybe(`SELECT 1 FROM reservation_tables rt JOIN reservations r ON r.id=rt.reservation_id WHERE rt.table_id=$1 AND r.status='seated' LIMIT 1`, [id]);
+    if (seated) throw conflict(`Table ${t.name} is occupied by a seated party — complete that visit first`, "TABLE_OCCUPIED");
+  }
   if (input.status === "available" && t.status === "blocked") { /* unblock */ }
   await db.exec(`UPDATE tables SET status=$2, blocked_reason=$3 WHERE id=$1`, [id, input.status, input.status === "blocked" ? input.reason ?? null : null]);
-  await audit(db, ctx, `table.${input.status === "available" ? (t.status === "cleaning" ? "ready" : "unblock") : input.status}`, "table", id, { from: t.status });
+  await audit(db, ctx, `table.${input.status === "available" ? (t.status === "cleaning" || t.status === "occupied" ? "ready" : "unblock") : input.status}`, "table", id, { from: t.status });
   await notifyChange(db, ctx.orgId, locationId, "floor");
 }
 

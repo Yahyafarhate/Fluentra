@@ -4,4 +4,5 @@ export const ar5: Record<string, string> = {
   "move": "نقل", "Move to another table": "النقل إلى طاولة أخرى", "Move guests": "نقل الضيوف",
   "Guests moved — the old table is awaiting cleaning": "تم نقل الضيوف — الطاولة السابقة بانتظار التنظيف",
   "The guests keep their reservation. The table they leave goes to “awaiting cleaning”, the new one becomes occupied.": "يحتفظ الضيوف بحجزهم. تنتقل الطاولة التي غادروها إلى «بانتظار التنظيف» وتصبح الجديدة مشغولة.",
+  "This party is seated. To change its table, use “Move” on the reservation.": "هذا الحجز جالس بالفعل. لتغيير الطاولة استخدم «نقل» في الحجز.",
 };
